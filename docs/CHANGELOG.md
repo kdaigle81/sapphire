@@ -1,18 +1,24 @@
-# 2.0.0 - Knowledge, Privacy, and Polish
+# 2.0.0 - Complete Refactor
 ## February 21, 2026
 - Knowledge base system — people, knowledge tabs, scoped entries with embeddings
 - Mind view — unified memories, people, knowledge, AI notes
+- RAG - nomic embeddings with per-chat documents and support for Mind tab
+- Persona feature - combines prompt, voice, model, tools, mind, and spices to a preset
 - Per-chat private mode — permanently private chats, enforced at provider + tool level
 - Privacy mode fail-closed — errors block cloud access instead of silently passing
 - Story engine — folder-based stories, dynamic tools, prompt override
 - Nav rail with mobile overflow and flyout groups
 - Views migrated from plugins (settings, prompts, toolsets, spices, schedule)
-- Bitcoin wallet, email multi-account, SSH plugins
+- Bitcoin wallet - per persona get, check and send
+- Email multi-account - set an email acct for each persona
+- SSH plugin - local and remote SSH via key (use ssh-copy-id)
 - Streaming tool status indicators with pending/running/complete states
 - Wakeword suppression during web UI mic recording
 - Scopes sync across all 4 backends (memory, knowledge, people, goals)
 - Auth: CSRF protection, session management, rate limiting
-- Bug hunt: 17 issues identified, 15 fixed, 2 deferred
+- Heartbeat system with improved cron and tasks
+- Toolmaker - AI can create tools and add their settings to Settings page
+
 # 1.3.0 - FastAPI uvicorn
 ## February 7, 2026
 - Switched entire app to FastAPI
