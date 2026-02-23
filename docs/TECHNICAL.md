@@ -214,6 +214,30 @@ API keys, SOCKS credentials, email accounts, and wallet keys stored separately v
 
 **Priority:** Stored credential → Environment variable fallback (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `FIREWORKS_API_KEY`, `SAPPHIRE_SOCKS_USERNAME`, `SAPPHIRE_SOCKS_PASSWORD`)
 
+### Credential Encryption Details
+
+Sensitive fields (Bitcoin WIF keys, API keys, passwords) are encrypted at rest using [Fernet](https://cryptography.io/en/latest/fernet/) symmetric encryption:
+
+| Layer | Detail |
+|-------|--------|
+| **Cipher** | Fernet = AES-128-CBC + HMAC-SHA256 (encrypt-then-MAC) |
+| **Key derivation** | PBKDF2-HMAC-SHA256, 100,000 iterations |
+| **Key input** | Random 32-byte salt + machine identity (`hostname:username`) |
+| **Salt file** | `~/.config/sapphire/.scramble_salt` (permissions `0600`) |
+
+**Machine binding:** The encryption key is derived from a salt file plus the current machine's hostname and OS username. This means `credentials.json` **cannot be decrypted on a different machine** or after an OS reinstall, even if copied.
+
+**Permanent key loss scenarios:**
+- Machine hardware failure or OS reinstall
+- `~/.config/sapphire/` directory deleted
+- `.scramble_salt` file deleted or corrupted
+- Username or hostname changed (different key derivation input)
+
+**Backup implications:**
+- `credentials.json` is deliberately excluded from Sapphire's `user/` backup system
+- For Bitcoin wallets: use the **Export Backup** button in Settings → Plugins → Bitcoin to save a plaintext WIF file you can import on any machine
+- For API keys: re-enter them in Settings after a fresh install (or set via environment variables)
+
 ---
 
 ## Default Ports
