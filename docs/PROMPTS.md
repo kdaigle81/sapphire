@@ -25,7 +25,7 @@ Prompt built from swappable pieces. Mix and match. Ideal for stories where the A
 - Changes activate immediately
 - Prompt selector and editor stay synced — switching either updates both
 
-<img src="../sapphire-images/sapphire-prompts.png" alt="Sapphire prompt editor with assembled components" width="50%">
+<img width="50%" alt="sapphire-prompts" src="https://github.com/user-attachments/assets/3906aba8-d388-49d7-9aba-dd44e9d527f6" />
 
 
 ### Sections
