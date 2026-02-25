@@ -11,7 +11,7 @@ class TestPromptManagerLoading:
     
     def test_load_pieces_success(self, tmp_path):
         """_load_pieces should load prompt_pieces.json."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -37,7 +37,7 @@ class TestPromptManagerLoading:
     
     def test_load_pieces_missing_file(self, tmp_path):
         """_load_pieces should handle missing file gracefully."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -55,7 +55,7 @@ class TestPromptManagerLoading:
     
     def test_load_monoliths_success(self, tmp_path):
         """_load_monoliths should load prompt_monoliths.json."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -82,7 +82,7 @@ class TestPromptManagerLoading:
     
     def test_load_spices_success(self, tmp_path):
         """_load_spices should load prompt_spices.json."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -112,7 +112,7 @@ class TestPromptManagerTemplates:
     
     def test_replace_ai_name(self):
         """Should replace {ai_name} placeholder."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -128,7 +128,7 @@ class TestPromptManagerTemplates:
     
     def test_replace_user_name(self):
         """Should replace {user_name} placeholder."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -143,7 +143,7 @@ class TestPromptManagerTemplates:
     
     def test_replace_both_placeholders(self):
         """Should replace both placeholders in one string."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -158,7 +158,7 @@ class TestPromptManagerTemplates:
     
     def test_handles_empty_string(self):
         """Should handle empty string."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -168,7 +168,7 @@ class TestPromptManagerTemplates:
     
     def test_handles_none(self):
         """Should handle None input."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -182,7 +182,7 @@ class TestPromptManagerAssembly:
     
     def test_assemble_basic_components(self):
         """Should assemble prompt from component structure."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -216,7 +216,7 @@ class TestPromptManagerAssembly:
     
     def test_assemble_with_extras(self):
         """Should include extras in assembly."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -248,7 +248,7 @@ class TestPromptManagerAssembly:
     
     def test_assemble_with_emotions(self):
         """Should include emotions in assembly."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -283,7 +283,7 @@ class TestPromptManagerSaving:
     
     def test_save_scenario_presets(self, tmp_path):
         """save_scenario_presets should write to prompt_pieces.json."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -306,7 +306,7 @@ class TestPromptManagerSaving:
     
     def test_save_monoliths(self, tmp_path):
         """save_monoliths should write to prompt_monoliths.json."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -325,7 +325,7 @@ class TestPromptManagerSaving:
     
     def test_save_components(self, tmp_path):
         """save_components should write to prompt_pieces.json."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -347,7 +347,7 @@ class TestPromptManagerSaving:
     
     def test_save_spices(self, tmp_path):
         """save_spices should write to prompt_spices.json."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -372,7 +372,7 @@ class TestPromptManagerEncoding:
     
     def test_load_pieces_utf8(self, tmp_path):
         """_load_pieces should handle UTF-8 content."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -394,7 +394,7 @@ class TestPromptManagerEncoding:
     
     def test_save_monoliths_utf8(self, tmp_path):
         """save_monoliths should write UTF-8 content."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -417,7 +417,7 @@ class TestPromptManagerFileWatcher:
     
     def test_start_file_watcher(self):
         """start_file_watcher should start background thread."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -439,7 +439,7 @@ class TestPromptManagerFileWatcher:
     
     def test_stop_file_watcher(self):
         """stop_file_watcher should stop background thread."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -454,7 +454,7 @@ class TestPromptManagerFileWatcher:
     
     def test_reload(self):
         """reload() should reload all data."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -471,7 +471,7 @@ class TestPromptManagerProperties:
     
     def test_components_property(self):
         """components property should return _components."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -481,7 +481,7 @@ class TestPromptManagerProperties:
     
     def test_scenario_presets_property(self):
         """scenario_presets property should return _scenario_presets."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -491,7 +491,7 @@ class TestPromptManagerProperties:
     
     def test_monoliths_property(self):
         """monoliths property should return _monoliths."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -501,7 +501,7 @@ class TestPromptManagerProperties:
     
     def test_spices_property(self):
         """spices property should return _spices."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         with patch.object(PromptManager, '__init__', lambda self: None):
             mgr = PromptManager()
@@ -515,14 +515,14 @@ class TestPromptCrud:
     
     def test_list_prompts_includes_monoliths(self):
         """list_prompts should include monolith names."""
-        with patch('core.modules.system.prompt_crud.prompt_manager') as mock_mgr:
+        with patch('core.prompt_crud.prompt_manager') as mock_mgr:
             mock_mgr.monoliths = {"default": "text", "custom": "text2"}
             mock_mgr.scenario_presets = {}
             
-            with patch('core.modules.system.prompt_crud.prompt_state') as mock_state:
+            with patch('core.prompt_crud.prompt_state') as mock_state:
                 mock_state._user_prompts = {}
                 
-                from core.modules.system.prompt_crud import list_prompts
+                from core.prompt_crud import list_prompts
                 result = list_prompts()
                 
                 assert "default" in result
@@ -530,14 +530,14 @@ class TestPromptCrud:
     
     def test_list_prompts_includes_scenarios(self):
         """list_prompts should include scenario preset names."""
-        with patch('core.modules.system.prompt_crud.prompt_manager') as mock_mgr:
+        with patch('core.prompt_crud.prompt_manager') as mock_mgr:
             mock_mgr.monoliths = {}
             mock_mgr.scenario_presets = {"work_mode": {}, "casual": {}}
             
-            with patch('core.modules.system.prompt_crud.prompt_state') as mock_state:
+            with patch('core.prompt_crud.prompt_state') as mock_state:
                 mock_state._user_prompts = {}
                 
-                from core.modules.system.prompt_crud import list_prompts
+                from core.prompt_crud import list_prompts
                 result = list_prompts()
                 
                 assert "work_mode" in result
@@ -545,14 +545,14 @@ class TestPromptCrud:
     
     def test_get_prompt_monolith(self):
         """get_prompt should return monolith with content."""
-        with patch('core.modules.system.prompt_crud.prompt_manager') as mock_mgr:
+        with patch('core.prompt_crud.prompt_manager') as mock_mgr:
             mock_mgr.monoliths = {"test": {"content": "Test prompt content", "privacy_required": False}}
             mock_mgr.scenario_presets = {}
             
-            with patch('core.modules.system.prompt_crud.prompt_state') as mock_state:
+            with patch('core.prompt_crud.prompt_state') as mock_state:
                 mock_state._user_prompts = {}
                 
-                from core.modules.system.prompt_crud import get_prompt
+                from core.prompt_crud import get_prompt
                 result = get_prompt("test")
                 
                 assert result["type"] == "monolith"
@@ -560,14 +560,14 @@ class TestPromptCrud:
     
     def test_get_prompt_not_found(self):
         """get_prompt should return None for missing prompt."""
-        with patch('core.modules.system.prompt_crud.prompt_manager') as mock_mgr:
+        with patch('core.prompt_crud.prompt_manager') as mock_mgr:
             mock_mgr.monoliths = {}
             mock_mgr.scenario_presets = {}
             
-            with patch('core.modules.system.prompt_crud.prompt_state') as mock_state:
+            with patch('core.prompt_crud.prompt_state') as mock_state:
                 mock_state._user_prompts = {}
                 
-                from core.modules.system.prompt_crud import get_prompt
+                from core.prompt_crud import get_prompt
                 result = get_prompt("nonexistent")
                 
                 assert result is None
@@ -578,17 +578,17 @@ class TestPromptState:
     
     def test_get_active_preset_name(self):
         """Should return current active preset name."""
-        with patch('core.modules.system.prompt_state.prompt_manager') as mock_mgr:
+        with patch('core.prompt_state.prompt_manager') as mock_mgr:
             mock_mgr._active_preset_name = "custom_prompt"
             
-            from core.modules.system.prompt_state import get_active_preset_name
+            from core.prompt_state import get_active_preset_name
             result = get_active_preset_name()
             
             assert result == "custom_prompt"
     
     def test_clear_spice(self):
         """clear_spice should empty spice field."""
-        from core.modules.system import prompt_state
+        from core import prompt_state
         
         prompt_state._assembled_state = {"spice": "something spicy"}
         

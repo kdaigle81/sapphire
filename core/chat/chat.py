@@ -8,7 +8,6 @@ from typing import Dict, Any, Optional, List
 
 import config
 from .history import ConversationHistory, ChatSessionManager, count_tokens
-from .module_loader import ModuleLoader
 from .function_manager import FunctionManager
 from .chat_streaming import StreamingChat
 from .chat_tool_calling import ToolCallingEngine, filter_to_thinking_only
@@ -119,9 +118,7 @@ class LLMChat:
         
         self.history = self.session_manager
         
-        self.module_loader = ModuleLoader()
         self.current_system_prompt = None
-        self.module_loader.set_system(self.system) if hasattr(self, 'system') else None
         self.function_manager = FunctionManager()
         
         self.tool_engine = ToolCallingEngine(self.function_manager)
@@ -158,7 +155,7 @@ class LLMChat:
 
     def refresh_spice_if_needed(self):
         turn_count = self.session_manager.get_turn_count()
-        from core.modules.system import prompts
+        from core import prompts
 
         # Check per-chat spice setting
         chat_settings = self.session_manager.get_chat_settings()
@@ -401,24 +398,6 @@ class LLMChat:
             chat_start_time = time.time()
             self.refresh_spice_if_needed()
             logger.info(f"[CHAT] CHAT: user said something here")
-
-            module_name, module_info, processed_text = self.module_loader.detect_module(user_input)
-            if module_name:
-                logger.info(f"[MODULE] Module detected: {module_name}")
-                module_config = self.module_loader.modules.get(module_name, {})
-                should_save = module_config.get("save_to_history", True)
-                active_chat = self.session_manager.get_active_chat_name()
-                
-                # Check save_to_history BEFORE adding any messages
-                if should_save:
-                    self.session_manager.add_user_message(user_input)
-                
-                response_text = self.module_loader.process_direct(module_name, processed_text, active_chat)
-                
-                if should_save:
-                    self.session_manager.add_assistant_final(response_text)
-                
-                return response_text
 
             # Update story engine FIRST (before building messages) based on current settings
             self._update_story_engine()
@@ -883,7 +862,7 @@ class LLMChat:
         try:
             # Build system prompt from task settings
             prompt_name = task_settings.get("prompt", "default")
-            from core.modules.system import prompts
+            from core import prompts
             prompt_data = prompts.get_prompt(prompt_name)
             if prompt_data:
                 system_prompt = prompt_data.get("content") if isinstance(prompt_data, dict) else str(prompt_data)

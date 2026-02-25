@@ -8,7 +8,7 @@ export default {
     name: 'System',
     icon: '\u26A1',
     description: 'System settings and danger zone',
-    essentialKeys: ['PLUGINS_ENABLED', 'WEB_UI_SSL_ADHOC'],
+    essentialKeys: ['WEB_UI_SSL_ADHOC'],
     advancedKeys: ['WEB_UI_HOST', 'WEB_UI_PORT'],
 
     render(ctx) {

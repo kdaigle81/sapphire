@@ -327,8 +327,8 @@ def _normalize_name(name: str) -> str:
 
 def _get_current_preset_name() -> str:
     """Get current preset name, preferring existing non-generic names."""
-    from core.modules.system import prompts
-    from core.modules.system.prompt_state import _assembled_state
+    from core import prompts
+    from core.prompt_state import _assembled_state
     
     current = prompts.get_active_preset_name()
     if current and current not in ['assembled', 'unknown', 'random', '']:
@@ -339,8 +339,8 @@ def _get_current_preset_name() -> str:
 
 def _build_status_string(preset_name: str) -> str:
     """Build status string like 'albert(556): albert, survive, mars'."""
-    from core.modules.system import prompts
-    from core.modules.system.prompt_state import _assembled_state
+    from core import prompts
+    from core.prompt_state import _assembled_state
     
     prompt_data = prompts.get_current_prompt()
     content = prompt_data.get('content') if isinstance(prompt_data, dict) else str(prompt_data)
@@ -365,8 +365,8 @@ def _build_status_string(preset_name: str) -> str:
 
 def _save_and_activate_assembled(preset_name: str, headers: dict, api_url: str) -> tuple:
     """Save current _assembled_state as a preset and activate it."""
-    from core.modules.system import prompts
-    from core.modules.system.prompt_state import _assembled_state
+    from core import prompts
+    from core.prompt_state import _assembled_state
     
     components = {}
     for key in ['character', 'location', 'relationship', 'goals', 'format', 'scenario']:
@@ -451,7 +451,7 @@ def execute(function_name, arguments, config):
         # === Universal tools ===
         
         if function_name == "view_prompt":
-            from core.modules.system import prompts
+            from core import prompts
             
             name = arguments.get('name')
             
@@ -472,7 +472,7 @@ def execute(function_name, arguments, config):
             return f"[{name} - {prompt_type}]\n\n{content}", True
 
         elif function_name == "switch_prompt":
-            from core.modules.system import prompts
+            from core import prompts
             
             name = arguments.get('name')
             
@@ -680,7 +680,7 @@ def execute(function_name, arguments, config):
         # === Monolith-only tools ===
 
         elif function_name == "edit_prompt":
-            from core.modules.system import prompts
+            from core import prompts
             
             content = arguments.get('content')
             if not content:
@@ -725,8 +725,8 @@ def execute(function_name, arguments, config):
         # === Assembled-only tools ===
         
         elif function_name == "set_piece":
-            from core.modules.system import prompts
-            from core.modules.system.prompt_state import _assembled_state
+            from core import prompts
+            from core.prompt_state import _assembled_state
             
             component = _normalize_component(arguments.get('component', ''))
             key = _normalize_name(arguments.get('key', ''))
@@ -769,7 +769,7 @@ def execute(function_name, arguments, config):
             return f"{action} {component}='{key}'. {status}", True
 
         elif function_name == "remove_piece":
-            from core.modules.system.prompt_state import _assembled_state
+            from core.prompt_state import _assembled_state
             
             component = _normalize_component(arguments.get('component', ''))
             key = _normalize_name(arguments.get('key', ''))
@@ -795,8 +795,8 @@ def execute(function_name, arguments, config):
             return f"Removed '{key}' from {component}. {status}", True
 
         elif function_name == "create_piece":
-            from core.modules.system import prompts
-            from core.modules.system.prompt_state import _assembled_state
+            from core import prompts
+            from core.prompt_state import _assembled_state
             
             component = _normalize_component(arguments.get('component', ''))
             key = _normalize_name(arguments.get('key', ''))
@@ -842,7 +842,7 @@ def execute(function_name, arguments, config):
             return f"Created {component}='{key}'. {status}", True
 
         elif function_name == "list_pieces":
-            from core.modules.system import prompts
+            from core import prompts
             
             component = _normalize_component(arguments.get('component', ''))
             

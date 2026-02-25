@@ -1,9 +1,9 @@
-# core/modules/system/toolsets/__init__.py
+# core/toolsets/__init__.py
 """
 Toolsets module - manages AI tool/function sets.
 
 Usage:
-    from core.modules.system.toolsets import get_toolset, get_all_toolsets, toolset_exists
+    from core.toolsets import get_toolset, get_all_toolsets, toolset_exists
 """
 
 from .toolset_manager import toolset_manager

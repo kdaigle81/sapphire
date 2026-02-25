@@ -31,10 +31,6 @@
     "long": "List of IP addresses, hostnames, and CIDR ranges that are allowed when Privacy Mode is active. All other network connections are blocked. Supports single IPs (192.168.1.50), hostnames (localhost, myserver.local), and CIDR notation for ranges (192.168.0.0/16, 10.0.0.0/8). Default includes RFC1918 private address ranges for LAN-only operation."
   },
   
-  "PLUGINS_ENABLED": {
-    "short": "Enable plugins from plugins/ and user/plugins/ directories",
-    "long": "Plugins add UI extensions and additional keyword-triggered modules. Disabling this prevents plugins from loading (both built-in plugins/ and custom user/plugins/). Core system modules (reset, stop, backup, etc.) are always enabled regardless of this setting. Requires page refresh to take effect."
-  },
   "FUNCTIONS_ENABLED": {
     "short": "Enable LLM tool calling (web search, memory, etc.)",
     "long": "When enabled, the AI can use tools from functions/ like web search, memory storage/retrieval, image generation, self-modification (meta), and more. Disabling this restricts the AI to text-only responses without any tool access. Different from MODULES which are keyword-triggered behaviors."

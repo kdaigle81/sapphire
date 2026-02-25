@@ -61,7 +61,7 @@ class StreamingChat:
 
         # Check if current prompt requires privacy mode
         try:
-            from core.modules.system.prompt_state import is_current_prompt_private
+            from core.prompt_state import is_current_prompt_private
             from core.privacy import is_privacy_mode
             if is_current_prompt_private() and not is_privacy_mode():
                 yield {"type": "error", "text": "This prompt requires Privacy Mode to be enabled."}
@@ -74,26 +74,6 @@ class StreamingChat:
             self.cancel_flag = False
             self.current_stream = None
             self.ephemeral = False
-
-            module_name, module_info, processed_text = self.main_chat.module_loader.detect_module(user_input)
-            if module_name:
-                logger.info(f"[MODULE] Module detected: {module_name}")
-                module_config = self.main_chat.module_loader.modules.get(module_name, {})
-                should_save = module_config.get("save_to_history", True)
-                self.ephemeral = not should_save
-                active_chat = self.main_chat.session_manager.get_active_chat_name()
-                
-                if should_save:
-                    self.main_chat.session_manager.add_user_message(user_input)
-                
-                response_text = self.main_chat.module_loader.process_direct(module_name, processed_text, active_chat)
-                
-                if should_save:
-                    self.main_chat.session_manager.add_assistant_final(response_text)
-                
-                # Module responses as content events
-                yield {"type": "content", "text": response_text}
-                return
 
             # Update story engine FIRST (before building messages) based on current settings
             self.main_chat._update_story_engine()

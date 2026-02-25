@@ -63,8 +63,8 @@ except Exception as e:
 
 from core.process_manager import ProcessManager, kill_process_on_port
 
-from core.modules.system import prompts
-from core.modules.system.toolsets import toolset_manager
+from core import prompts
+from core.toolsets import toolset_manager
 
 
 # Ensure wakeword models exist (downloads if needed)
@@ -125,7 +125,6 @@ class VoiceChatSystem:
         self.llm_chat = LLMChat(self.history, system=self)
         self._prime_default_prompt()
         self._apply_initial_chat_settings()
-        self._init_modules()
         self.init_components()
         self._cleanup_orphaned_rag()
 
@@ -221,16 +220,6 @@ class VoiceChatSystem:
             logger.info(f"Applied chat settings on startup")
         except Exception as e:
             logger.warning(f"Could not apply initial settings: {e}")
-
-    def _init_modules(self):
-        try:
-            for module_name in self.llm_chat.module_loader.module_instances:
-                module = self.llm_chat.module_loader.module_instances[module_name]
-                if hasattr(module, 'attach_system'):
-                    module.attach_system(self)
-                    logger.info(f"Attached system to module: {module_name}")
-        except Exception as e:
-            logger.error(f"Error initializing modules: {e}")
 
     def init_components(self):
         try:
@@ -524,7 +513,7 @@ def run():
         set_system(voice_chat, restart_callback=request_restart, shutdown_callback=request_shutdown)
 
         # Continuity - scheduled autonomous tasks
-        from core.modules.continuity import ContinuityScheduler, ContinuityExecutor
+        from core.continuity import ContinuityScheduler, ContinuityExecutor
         continuity_executor = ContinuityExecutor(voice_chat)
         continuity_scheduler = ContinuityScheduler(voice_chat, continuity_executor)
         voice_chat.continuity_scheduler = continuity_scheduler  # Attach for stop() and API routes
@@ -533,7 +522,7 @@ def run():
 
         settings.start_file_watcher()
 
-        from core.modules.system import prompts
+        from core import prompts
         prompts.prompt_manager.start_file_watcher()
         logger.info("Prompt file watcher started")
 

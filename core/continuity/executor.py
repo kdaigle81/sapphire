@@ -1,4 +1,4 @@
-# core/modules/continuity/executor.py
+# core/continuity/executor.py
 """
 Continuity Executor - Runs scheduled tasks with proper context isolation.
 Switches chat context, applies settings, runs LLM, restores original state.
@@ -252,7 +252,7 @@ class ContinuityExecutor:
             return task
 
         try:
-            from core.modules.system.personas import persona_manager
+            from core.personas import persona_manager
             persona = persona_manager.get(persona_name)
             if not persona:
                 logger.warning(f"[Continuity] Persona '{persona_name}' not found, skipping")
@@ -348,7 +348,7 @@ class ContinuityExecutor:
             settings["prompt"] = task["prompt"]
             
             # Also apply to live LLM
-            from core.modules.system import prompts
+            from core import prompts
             prompt_data = prompts.get_prompt(task["prompt"])
             if prompt_data:
                 content = prompt_data.get("content") if isinstance(prompt_data, dict) else str(prompt_data)

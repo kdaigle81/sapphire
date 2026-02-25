@@ -1,4 +1,4 @@
-# core/modules/system/spice_sets/spice_set_manager.py
+# core/spice_sets/spice_set_manager.py
 import logging
 import json
 import threading

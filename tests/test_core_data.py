@@ -230,18 +230,18 @@ class TestPromptState:
     
     def test_prompt_state_imports(self):
         """Should import prompt_state module."""
-        from core.modules.system import prompt_state
+        from core import prompt_state
         assert prompt_state is not None
     
     def test_get_current_state_function_exists(self):
         """get_current_state function should exist."""
-        from core.modules.system import prompt_state
+        from core import prompt_state
         
         assert callable(prompt_state.get_current_state)
     
     def test_get_prompt_mode(self):
         """Should return mode string."""
-        from core.modules.system import prompt_state
+        from core import prompt_state
         
         mode = prompt_state.get_prompt_mode()
         
@@ -249,7 +249,7 @@ class TestPromptState:
     
     def test_is_assembled_mode_returns_bool(self):
         """is_assembled_mode should return boolean."""
-        from core.modules.system import prompt_state
+        from core import prompt_state
         
         result = prompt_state.is_assembled_mode()
         
@@ -257,13 +257,13 @@ class TestPromptState:
     
     def test_assemble_prompt_function_exists(self):
         """assemble_prompt function should exist."""
-        from core.modules.system import prompt_state
+        from core import prompt_state
         
         assert callable(prompt_state.assemble_prompt)
     
     def test_get_current_spice(self):
         """get_current_spice should return spice or None."""
-        from core.modules.system import prompt_state
+        from core import prompt_state
         
         result = prompt_state.get_current_spice()
         
@@ -280,24 +280,24 @@ class TestPromptManager:
     
     def test_prompt_manager_imports(self):
         """Should import PromptManager."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         assert PromptManager is not None
     
     def test_prompt_manager_has_assemble_method(self):
         """PromptManager should have assemble_from_components method."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         assert hasattr(PromptManager, 'assemble_from_components')
     
     def test_prompt_manager_has_reload_method(self):
         """PromptManager should have reload method."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         assert hasattr(PromptManager, 'reload')
     
     def test_prompt_manager_initializes(self):
         """PromptManager should initialize without error."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         pm = PromptManager()
         
@@ -306,7 +306,7 @@ class TestPromptManager:
     
     def test_prompt_manager_has_replace_templates(self):
         """PromptManager should have template replacement method."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
         
         assert hasattr(PromptManager, '_replace_templates')
 
@@ -389,24 +389,24 @@ class TestToolsetManager:
     
     def test_toolset_manager_imports(self):
         """Should import toolset_manager."""
-        from core.modules.system.toolsets.toolset_manager import ToolsetManager
+        from core.toolsets.toolset_manager import ToolsetManager
         assert ToolsetManager is not None
     
     def test_toolset_manager_has_get_toolset_method(self):
         """Should have get_toolset method."""
-        from core.modules.system.toolsets.toolset_manager import ToolsetManager
+        from core.toolsets.toolset_manager import ToolsetManager
         
         assert hasattr(ToolsetManager, 'get_toolset')
     
     def test_toolset_manager_has_get_toolset_names_method(self):
         """Should have get_toolset_names method."""
-        from core.modules.system.toolsets.toolset_manager import ToolsetManager
+        from core.toolsets.toolset_manager import ToolsetManager
         
         assert hasattr(ToolsetManager, 'get_toolset_names')
     
     def test_toolset_manager_loads_toolsets(self):
         """Should load toolsets on init."""
-        from core.modules.system.toolsets.toolset_manager import ToolsetManager
+        from core.toolsets.toolset_manager import ToolsetManager
         
         tm = ToolsetManager()
         
@@ -415,7 +415,7 @@ class TestToolsetManager:
     
     def test_get_toolset_names_returns_list(self):
         """get_toolset_names should return list of names."""
-        from core.modules.system.toolsets.toolset_manager import ToolsetManager
+        from core.toolsets.toolset_manager import ToolsetManager
         
         tm = ToolsetManager()
         toolsets = tm.get_toolset_names()
@@ -424,7 +424,7 @@ class TestToolsetManager:
     
     def test_get_toolset_functions_returns_list(self):
         """get_toolset_functions should return function list."""
-        from core.modules.system.toolsets.toolset_manager import ToolsetManager
+        from core.toolsets.toolset_manager import ToolsetManager
         
         tm = ToolsetManager()
         toolsets = tm.get_toolset_names()
@@ -435,7 +435,7 @@ class TestToolsetManager:
     
     def test_get_toolset_functions_invalid_returns_empty(self):
         """get_toolset_functions with invalid name should return empty."""
-        from core.modules.system.toolsets.toolset_manager import ToolsetManager
+        from core.toolsets.toolset_manager import ToolsetManager
         
         tm = ToolsetManager()
         funcs = tm.get_toolset_functions("nonexistent_toolset_xyz")

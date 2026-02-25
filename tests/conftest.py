@@ -17,9 +17,7 @@ def settings_defaults():
         "identity": {
             "DEFAULT_USERNAME": "TestUser"
         },
-        "features": {
-            "PLUGINS_ENABLED": False
-        },
+        "features": {},
         "llm": {
             "LLM_MAX_HISTORY": 10,
             "CONTEXT_LIMIT": 4000,

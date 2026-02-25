@@ -65,7 +65,7 @@ def get_user_defaults() -> Dict[str, Any]:
     default_persona = getattr(config, 'DEFAULT_PERSONA', '') or ''
     if default_persona:
         try:
-            from core.modules.system.personas import persona_manager
+            from core.personas import persona_manager
             persona = persona_manager.get(default_persona)
             if persona and persona.get('settings'):
                 merged.update(persona['settings'])

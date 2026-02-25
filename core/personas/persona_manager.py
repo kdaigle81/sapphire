@@ -1,4 +1,4 @@
-# core/modules/system/personas/persona_manager.py
+# core/personas/persona_manager.py
 import logging
 import json
 import shutil

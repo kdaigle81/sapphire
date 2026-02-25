@@ -1,4 +1,4 @@
-# core/modules/continuity/__init__.py
+# core/continuity/__init__.py
 """
 Continuity - Scheduled autonomous AI tasks.
 Wake the AI on a schedule to run prompts, use tools, and speak.

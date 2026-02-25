@@ -1,4 +1,4 @@
-# core/modules/continuity/scheduler.py
+# core/continuity/scheduler.py
 """
 Continuity Scheduler - Background thread that checks cron schedules and fires tasks.
 """

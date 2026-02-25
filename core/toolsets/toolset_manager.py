@@ -1,4 +1,4 @@
-# core/modules/system/toolsets/toolset_manager.py
+# core/toolsets/toolset_manager.py
 import logging
 import json
 import threading

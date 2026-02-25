@@ -27,7 +27,6 @@
   },
   
   "features": {
-    "PLUGINS_ENABLED": true,
     "FUNCTIONS_ENABLED": true
   },
   

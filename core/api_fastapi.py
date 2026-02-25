@@ -24,7 +24,7 @@ from core.auth import (
 )
 from core.setup import get_password_hash, save_password_hash, verify_password, is_setup_complete
 from core.event_bus import publish, Events
-from core.modules.system import prompts
+from core import prompts
 from core.story_engine import STORY_TOOL_NAMES
 from core.stt.stt_null import NullWhisperClient as _NullWhisperClient
 from core.stt.utils import can_transcribe
@@ -479,7 +479,7 @@ def _apply_chat_settings(system, settings: dict):
             system.llm_chat.function_manager.set_bitcoin_scope(scope if scope != "none" else None)
 
         if "spice_set" in settings:
-            from core.modules.system.spice_sets import spice_set_manager
+            from core.spice_sets import spice_set_manager
             set_name = settings["spice_set"]
             if spice_set_manager.set_exists(set_name):
                 categories = spice_set_manager.get_categories(set_name)
@@ -695,7 +695,7 @@ async def get_unified_status(request: Request, _=Depends(require_login), system=
         # Backfill trim_color from persona if missing (pre-persona chats)
         if not chat_settings.get('trim_color') and chat_settings.get('persona'):
             try:
-                from core.modules.system.personas import persona_manager
+                from core.personas import persona_manager
                 p = persona_manager.get(chat_settings['persona'])
                 if p:
                     chat_settings['trim_color'] = p.get('settings', {}).get('trim_color', '')
@@ -824,7 +824,7 @@ async def get_init_data(request: Request, _=Depends(require_login), system=Depen
     """Mega-endpoint for initial page load - combines all plugin init data."""
     try:
         import glob as glob_mod
-        from core.modules.system.toolsets import toolset_manager
+        from core.toolsets import toolset_manager
 
         function_manager = system.llm_chat.function_manager
         session_manager = system.llm_chat.session_manager
@@ -900,7 +900,7 @@ async def get_init_data(request: Request, _=Depends(require_login), system=Depen
         spice_data = _build_spice_response()
 
         # Spice sets data
-        from core.modules.system.spice_sets import spice_set_manager
+        from core.spice_sets import spice_set_manager
         spice_sets_list = []
         for name in spice_set_manager.get_set_names():
             ss = spice_set_manager.get_set(name)
@@ -934,7 +934,7 @@ async def get_init_data(request: Request, _=Depends(require_login), system=Depen
                     avatars[role] = None
 
         # Personas data
-        from core.modules.system.personas import persona_manager
+        from core.personas import persona_manager
         personas_list = persona_manager.get_list()
 
         # Plugins config (merged: static + user overrides)
@@ -976,11 +976,6 @@ async def get_init_data(request: Request, _=Depends(require_login), system=Depen
         logger.error(f"Error getting init data: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.get("/api/modules")
-async def get_modules(request: Request, _=Depends(require_login), system=Depends(get_system)):
-    """Get list of loaded modules."""
-    return system.llm_chat.module_loader.get_module_list()
 
 
 # =============================================================================
@@ -2126,7 +2121,7 @@ async def merge_updates(request: Request, _=Depends(require_login)):
     if not prompt_result:
         raise HTTPException(status_code=500, detail="Failed to merge prompt defaults")
 
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     personas_added = persona_manager.merge_defaults(backup_dir)
 
     added = prompt_result["added"]
@@ -2151,7 +2146,7 @@ async def reset_prompts_chat_defaults(request: Request, _=Depends(require_login)
 @app.get("/api/toolsets")
 async def list_toolsets(request: Request, _=Depends(require_login), system=Depends(get_system)):
     """List all toolsets. Use ?filter=sidebar to exclude module-level entries."""
-    from core.modules.system.toolsets import toolset_manager
+    from core.toolsets import toolset_manager
     function_manager = system.llm_chat.function_manager
     filter_mode = request.query_params.get("filter", "")
     ts_set = set()
@@ -2242,7 +2237,7 @@ async def enable_functions(request: Request, _=Depends(require_login), system=De
 @app.post("/api/toolsets/custom")
 async def save_custom_toolset(request: Request, _=Depends(require_login)):
     """Save a custom toolset."""
-    from core.modules.system.toolsets import toolset_manager
+    from core.toolsets import toolset_manager
     data = await request.json()
     name = data.get('name')
     functions = data.get('functions', [])
@@ -2257,7 +2252,7 @@ async def save_custom_toolset(request: Request, _=Depends(require_login)):
 @app.delete("/api/toolsets/{toolset_name}")
 async def delete_toolset(toolset_name: str, request: Request, _=Depends(require_login)):
     """Delete a custom toolset."""
-    from core.modules.system.toolsets import toolset_manager
+    from core.toolsets import toolset_manager
     if toolset_manager.delete_toolset(toolset_name):
         return {"status": "success", "name": toolset_name}
     else:
@@ -2267,7 +2262,7 @@ async def delete_toolset(toolset_name: str, request: Request, _=Depends(require_
 @app.post("/api/toolsets/{toolset_name}/emoji")
 async def set_toolset_emoji(toolset_name: str, request: Request, _=Depends(require_login)):
     """Set custom emoji for a toolset (works on presets and user toolsets)."""
-    from core.modules.system.toolsets import toolset_manager
+    from core.toolsets import toolset_manager
     data = await request.json()
     emoji = data.get('emoji', '')
     if toolset_manager.set_emoji(toolset_name, emoji):
@@ -2438,14 +2433,14 @@ async def delete_spice(category: str, index: int, request: Request, _=Depends(re
 @app.get("/api/personas")
 async def list_personas(request: Request, _=Depends(require_login)):
     """List all personas with summary info."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     return {"personas": persona_manager.get_list(), "default": getattr(config, 'DEFAULT_PERSONA', '') or ''}
 
 
 @app.get("/api/personas/{name}")
 async def get_persona(name: str, request: Request, _=Depends(require_login)):
     """Get single persona with full details."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     persona = persona_manager.get(name)
     if not persona:
         raise HTTPException(status_code=404, detail="Persona not found")
@@ -2455,7 +2450,7 @@ async def get_persona(name: str, request: Request, _=Depends(require_login)):
 @app.post("/api/personas")
 async def create_persona(request: Request, _=Depends(require_login)):
     """Create a new persona."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     data = await request.json()
     name = data.get("name")
     if not name:
@@ -2468,7 +2463,7 @@ async def create_persona(request: Request, _=Depends(require_login)):
 @app.put("/api/personas/default")
 async def set_default_persona(request: Request, _=Depends(require_login)):
     """Set the default persona for new chats."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     from core.settings_manager import settings
     data = await request.json()
     name = data.get("name", "")
@@ -2489,7 +2484,7 @@ async def clear_default_persona(request: Request, _=Depends(require_login)):
 @app.put("/api/personas/{name}")
 async def update_persona(name: str, request: Request, _=Depends(require_login)):
     """Update an existing persona."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     if not persona_manager.exists(name):
         raise HTTPException(status_code=404, detail="Persona not found")
     data = await request.json()
@@ -2501,7 +2496,7 @@ async def update_persona(name: str, request: Request, _=Depends(require_login)):
 @app.delete("/api/personas/{name}")
 async def delete_persona(name: str, request: Request, _=Depends(require_login)):
     """Delete a persona."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     if not persona_manager.delete(name):
         raise HTTPException(status_code=404, detail="Persona not found")
     return {"status": "success"}
@@ -2510,7 +2505,7 @@ async def delete_persona(name: str, request: Request, _=Depends(require_login)):
 @app.post("/api/personas/{name}/duplicate")
 async def duplicate_persona(name: str, request: Request, _=Depends(require_login)):
     """Duplicate a persona with a new name."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     data = await request.json()
     new_name = data.get("name")
     if not new_name:
@@ -2523,7 +2518,7 @@ async def duplicate_persona(name: str, request: Request, _=Depends(require_login
 @app.post("/api/personas/{name}/avatar")
 async def upload_persona_avatar(name: str, request: Request, file: UploadFile = File(...), _=Depends(require_login)):
     """Upload avatar image for a persona (max 4MB)."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     if not persona_manager.exists(name):
         raise HTTPException(status_code=404, detail="Persona not found")
 
@@ -2545,7 +2540,7 @@ async def upload_persona_avatar(name: str, request: Request, file: UploadFile = 
 @app.delete("/api/personas/{name}/avatar")
 async def delete_persona_avatar(name: str, request: Request, _=Depends(require_login)):
     """Delete avatar for a persona, reverting to fallback."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     if not persona_manager.delete_avatar(name):
         raise HTTPException(status_code=404, detail="Persona not found")
     return {"status": "success"}
@@ -2554,7 +2549,7 @@ async def delete_persona_avatar(name: str, request: Request, _=Depends(require_l
 @app.get("/api/personas/{name}/avatar")
 async def serve_persona_avatar(name: str, request: Request, _=Depends(require_login)):
     """Serve persona avatar image."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     avatar_path = persona_manager.get_avatar_path(name)
     if not avatar_path:
         raise HTTPException(status_code=404, detail="Avatar not found")
@@ -2564,7 +2559,7 @@ async def serve_persona_avatar(name: str, request: Request, _=Depends(require_lo
 @app.post("/api/personas/{name}/load")
 async def load_persona(name: str, request: Request, _=Depends(require_login), system=Depends(get_system)):
     """Stamp persona settings into the active chat."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     persona = persona_manager.get(name)
     if not persona:
         raise HTTPException(status_code=404, detail="Persona not found")
@@ -2590,7 +2585,7 @@ async def load_persona(name: str, request: Request, _=Depends(require_login), sy
 @app.post("/api/personas/from-chat")
 async def create_persona_from_chat(request: Request, _=Depends(require_login), system=Depends(get_system)):
     """Create a persona from current active chat settings."""
-    from core.modules.system.personas import persona_manager
+    from core.personas import persona_manager
     data = await request.json()
     name = data.get("name")
     if not name:
@@ -2609,7 +2604,7 @@ async def create_persona_from_chat(request: Request, _=Depends(require_login), s
 @app.get("/api/spice-sets")
 async def list_spice_sets(request: Request, _=Depends(require_login)):
     """List all spice sets."""
-    from core.modules.system.spice_sets import spice_set_manager
+    from core.spice_sets import spice_set_manager
     sets = []
     for name in spice_set_manager.get_set_names():
         ss = spice_set_manager.get_set(name)
@@ -2625,7 +2620,7 @@ async def list_spice_sets(request: Request, _=Depends(require_login)):
 @app.get("/api/spice-sets/current")
 async def get_current_spice_set(request: Request, _=Depends(require_login)):
     """Get current spice set."""
-    from core.modules.system.spice_sets import spice_set_manager
+    from core.spice_sets import spice_set_manager
     name = spice_set_manager.active_name
     ss = spice_set_manager.get_set(name)
     return {"name": name, "categories": ss.get('categories', []), "emoji": ss.get('emoji', '')}
@@ -2634,7 +2629,7 @@ async def get_current_spice_set(request: Request, _=Depends(require_login)):
 @app.post("/api/spice-sets/{set_name}/activate")
 async def activate_spice_set(set_name: str, request: Request, _=Depends(require_login), system=Depends(get_system)):
     """Activate a spice set - updates which categories are enabled."""
-    from core.modules.system.spice_sets import spice_set_manager
+    from core.spice_sets import spice_set_manager
     if not spice_set_manager.set_exists(set_name):
         raise HTTPException(status_code=404, detail="Spice set not found")
 
@@ -2654,7 +2649,7 @@ async def activate_spice_set(set_name: str, request: Request, _=Depends(require_
 @app.post("/api/spice-sets/custom")
 async def save_custom_spice_set(request: Request, _=Depends(require_login)):
     """Save a custom spice set."""
-    from core.modules.system.spice_sets import spice_set_manager
+    from core.spice_sets import spice_set_manager
     data = await request.json()
     name = data.get('name')
     categories = data.get('categories', [])
@@ -2667,7 +2662,7 @@ async def save_custom_spice_set(request: Request, _=Depends(require_login)):
 @app.delete("/api/spice-sets/{set_name}")
 async def delete_spice_set(set_name: str, request: Request, _=Depends(require_login)):
     """Delete a spice set."""
-    from core.modules.system.spice_sets import spice_set_manager
+    from core.spice_sets import spice_set_manager
     if spice_set_manager.delete_set(set_name):
         return {"status": "success"}
     raise HTTPException(status_code=404, detail="Spice set not found")
@@ -2676,7 +2671,7 @@ async def delete_spice_set(set_name: str, request: Request, _=Depends(require_lo
 @app.post("/api/spice-sets/{set_name}/emoji")
 async def set_spice_set_emoji(set_name: str, request: Request, _=Depends(require_login)):
     """Set emoji for a spice set."""
-    from core.modules.system.spice_sets import spice_set_manager
+    from core.spice_sets import spice_set_manager
     data = await request.json()
     emoji = data.get('emoji', '')
     if spice_set_manager.set_emoji(set_name, emoji):
@@ -3681,54 +3676,44 @@ async def load_game_state(chat_name: str, request: Request, _=Depends(require_lo
 # =============================================================================
 
 @app.get("/api/backup/list")
-async def list_backups(request: Request, _=Depends(require_login), system=Depends(get_system)):
+async def list_backups(request: Request, _=Depends(require_login)):
     """List all backups."""
-    backup_module = system.llm_chat.module_loader.get_module_instance("backup")
-    if not backup_module:
-        raise HTTPException(status_code=503, detail="Backup module not loaded")
-    backups = backup_module.list_backups()
-    return {"backups": backups}
+    from core.backup import backup_manager
+    return {"backups": backup_manager.list_backups()}
 
 
 @app.post("/api/backup/create")
-async def create_backup(request: Request, _=Depends(require_login), system=Depends(get_system)):
+async def create_backup(request: Request, _=Depends(require_login)):
     """Create a backup."""
+    from core.backup import backup_manager
     data = await request.json() or {}
     backup_type = data.get('type', 'manual')
     if backup_type not in ('daily', 'weekly', 'monthly', 'manual'):
         raise HTTPException(status_code=400, detail="Invalid backup type")
 
-    backup_module = system.llm_chat.module_loader.get_module_instance("backup")
-    if not backup_module:
-        raise HTTPException(status_code=503, detail="Backup module not loaded")
-
-    filename = backup_module.create_backup(backup_type)
+    filename = backup_manager.create_backup(backup_type)
     if filename:
-        backup_module.rotate_backups()
+        backup_manager.rotate_backups()
         return {"status": "success", "filename": filename}
     else:
         raise HTTPException(status_code=500, detail="Backup creation failed")
 
 
 @app.delete("/api/backup/delete/{filename}")
-async def delete_backup(filename: str, request: Request, _=Depends(require_login), system=Depends(get_system)):
+async def delete_backup(filename: str, request: Request, _=Depends(require_login)):
     """Delete a backup."""
-    backup_module = system.llm_chat.module_loader.get_module_instance("backup")
-    if not backup_module:
-        raise HTTPException(status_code=503, detail="Backup module not loaded")
-    if backup_module.delete_backup(filename):
+    from core.backup import backup_manager
+    if backup_manager.delete_backup(filename):
         return {"status": "success", "deleted": filename}
     else:
         raise HTTPException(status_code=404, detail="Backup not found")
 
 
 @app.get("/api/backup/download/{filename}")
-async def download_backup(filename: str, request: Request, _=Depends(require_login), system=Depends(get_system)):
+async def download_backup(filename: str, request: Request, _=Depends(require_login)):
     """Download a backup."""
-    backup_module = system.llm_chat.module_loader.get_module_instance("backup")
-    if not backup_module:
-        raise HTTPException(status_code=503, detail="Backup module not loaded")
-    filepath = backup_module.get_backup_path(filename)
+    from core.backup import backup_manager
+    filepath = backup_manager.get_backup_path(filename)
     if filepath:
         return FileResponse(filepath, filename=filename, media_type='application/gzip')
     else:

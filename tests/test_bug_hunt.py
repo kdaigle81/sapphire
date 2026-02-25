@@ -28,17 +28,17 @@ class TestPersonaSettingsKeys:
 
     def test_email_scope_in_persona_keys(self):
         """email_scope must be in PERSONA_SETTINGS_KEYS."""
-        from core.modules.system.personas.persona_manager import PERSONA_SETTINGS_KEYS
+        from core.personas.persona_manager import PERSONA_SETTINGS_KEYS
         assert "email_scope" in PERSONA_SETTINGS_KEYS
 
     def test_bitcoin_scope_in_persona_keys(self):
         """bitcoin_scope must be in PERSONA_SETTINGS_KEYS."""
-        from core.modules.system.personas.persona_manager import PERSONA_SETTINGS_KEYS
+        from core.personas.persona_manager import PERSONA_SETTINGS_KEYS
         assert "bitcoin_scope" in PERSONA_SETTINGS_KEYS
 
     def test_all_scope_keys_in_persona_keys(self):
         """All scope keys must be bundleable in personas."""
-        from core.modules.system.personas.persona_manager import PERSONA_SETTINGS_KEYS
+        from core.personas.persona_manager import PERSONA_SETTINGS_KEYS
         required_scopes = [
             "memory_scope", "goal_scope", "knowledge_scope",
             "people_scope", "email_scope", "bitcoin_scope"
@@ -48,7 +48,7 @@ class TestPersonaSettingsKeys:
 
     def test_clean_settings_preserves_scopes(self):
         """_clean_settings should not strip scope keys."""
-        from core.modules.system.personas.persona_manager import PersonaManager, PERSONA_SETTINGS_KEYS
+        from core.personas.persona_manager import PersonaManager, PERSONA_SETTINGS_KEYS
 
         with patch.object(PersonaManager, '__init__', lambda self: None):
             mgr = PersonaManager()
@@ -238,7 +238,7 @@ class TestTaskSettingsScopes:
 
     def test_none_scope_not_filtered(self):
         """Setting a scope to 'none' should still be applied to chat settings."""
-        from core.modules.continuity.executor import ContinuityExecutor
+        from core.continuity.executor import ContinuityExecutor
 
         with patch.object(ContinuityExecutor, '__init__', lambda self: None):
             executor = ContinuityExecutor()
@@ -369,7 +369,7 @@ class TestPromptSaveThreadSafety:
 
     def test_concurrent_saves_dont_corrupt(self, tmp_path):
         """Concurrent saves should not produce corrupted JSON."""
-        from core.modules.system.prompt_manager import PromptManager
+        from core.prompt_manager import PromptManager
 
         prompts_dir = tmp_path / "user" / "prompts"
         prompts_dir.mkdir(parents=True)
@@ -585,8 +585,6 @@ class TestChatReadsAllScopes:
             chat_obj.session_manager = mock_session
             chat_obj.history = mock_session
             chat_obj.current_system_prompt = "test prompt"
-            chat_obj.module_loader = MagicMock()
-            chat_obj.module_loader.detect_module.return_value = (None, None, None)
             chat_obj._update_story_engine = MagicMock()
             chat_obj._use_new_config = False
             chat_obj.provider_primary = MagicMock()
@@ -633,7 +631,6 @@ class TestChatReadsAllScopes:
             "private_chat": False,
         }
         mock_main_chat.session_manager.get_active_chat_name.return_value = "stream_chat"
-        mock_main_chat.module_loader.detect_module.return_value = (None, None, None)
         mock_main_chat._update_story_engine = MagicMock()
         mock_main_chat._build_base_messages.return_value = [
             {"role": "system", "content": "sys"},
@@ -675,7 +672,7 @@ class TestApplyTaskSettingsAllScopes:
 
     def test_apply_task_settings_all_scope_keys(self):
         """All 6 scope keys + email + bitcoin must appear in update_chat_settings call."""
-        from core.modules.continuity.executor import ContinuityExecutor
+        from core.continuity.executor import ContinuityExecutor
 
         with patch.object(ContinuityExecutor, '__init__', lambda self: None):
             executor = ContinuityExecutor()
@@ -709,7 +706,7 @@ class TestRunForegroundRestoresContext:
 
     def test_run_foreground_restores_all_context(self):
         """After foreground execution, original chat + toolset + settings must be restored."""
-        from core.modules.continuity.executor import ContinuityExecutor
+        from core.continuity.executor import ContinuityExecutor
 
         with patch.object(ContinuityExecutor, '__init__', lambda self: None):
             executor = ContinuityExecutor()
@@ -841,7 +838,7 @@ class TestIsolatedChatSetsAllScopes:
             chat_obj.provider_primary.provider_name = "test"
             chat_obj.provider_primary.model = "test-model"
 
-            with patch('core.modules.system.prompts.get_prompt', return_value={"content": "system prompt"}):
+            with patch('core.prompts.get_prompt', return_value={"content": "system prompt"}):
                 with patch('core.chat.chat.get_generation_params', return_value={}):
                     chat_obj.isolated_chat("hello", {
                         "toolset": "test_tools",

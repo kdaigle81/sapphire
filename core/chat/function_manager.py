@@ -10,7 +10,7 @@ from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 import config
-from core.modules.system.toolsets import toolset_manager
+from core.toolsets import toolset_manager
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +181,7 @@ class FunctionManager:
     def _get_current_prompt_mode(self) -> str:
         """Get current prompt mode for filtering. Returns 'monolith' or 'assembled'."""
         try:
-            from core.modules.system.prompt_state import get_prompt_mode
+            from core.prompt_state import get_prompt_mode
             return get_prompt_mode()
         except ImportError:
             logger.warning("Could not import get_prompt_mode, defaulting to 'monolith'")

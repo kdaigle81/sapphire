@@ -13,8 +13,8 @@ class PromptManager:
     
     def __init__(self):
         # Single source of truth - user/prompts/ only
-        self.CORE_DIR = Path(__file__).parent / "prompts"
-        self.USER_DIR = Path(__file__).parent.parent.parent.parent / "user" / "prompts"
+        self.CORE_DIR = Path(__file__).parent / "prompt_defaults"
+        self.USER_DIR = Path(__file__).parent.parent / "user" / "prompts"
         
         self._components = {}
         self._scenario_presets = {}
