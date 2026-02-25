@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, List
 import config
 from .history import ConversationHistory, ChatSessionManager, count_tokens
 from .function_manager import FunctionManager
+from core.hooks import hook_runner, HookEvent
 from .chat_streaming import StreamingChat
 from .chat_tool_calling import ToolCallingEngine, filter_to_thinking_only
 from .llm_providers import get_provider, get_provider_for_url, get_provider_by_key, get_first_available_provider, get_generation_params
@@ -249,10 +250,15 @@ class LLMChat:
                     logger.info(f"[STORY] State block length: {len(state_block)} chars")
                     context_parts.append(f"<state turn=\"{turn}\">\n{state_block}\n</state>")
         
+        # Plugin prompt_inject hook — append to context_parts
+        if hook_runner.has_handlers("prompt_inject"):
+            inject_event = HookEvent(context_parts=context_parts, config=config)
+            hook_runner.fire("prompt_inject", inject_event)
+
         # Combine all context
         if context_parts:
             prompt = f"{prompt}\n\n{chr(10).join(context_parts)}"
-        
+
         return prompt, username
 
     def _update_story_engine(self):
@@ -401,7 +407,20 @@ class LLMChat:
 
             # Update story engine FIRST (before building messages) based on current settings
             self._update_story_engine()
-            
+
+            # Plugin pre_chat hook — can modify input, bypass LLM, or stop propagation
+            if hook_runner.has_handlers("pre_chat"):
+                hook_event = HookEvent(input=user_input, config=config,
+                                       metadata={"system": self.system})
+                hook_runner.fire("pre_chat", hook_event)
+                if hook_event.skip_llm:
+                    response = hook_event.response or ""
+                    if response:
+                        self.session_manager.add_user_message(user_input)
+                        self.session_manager.add_assistant_final(response)
+                    return response
+                user_input = hook_event.input  # may have been mutated
+
             messages = self._build_base_messages(user_input)
             self.session_manager.add_user_message(user_input)
             

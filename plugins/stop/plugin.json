@@ -1,0 +1,18 @@
+{
+  "name": "stop",
+  "version": "1.0.0",
+  "description": "Voice command to halt TTS playback and cancel LLM generation",
+  "author": "sapphire",
+  "priority": 1,
+  "capabilities": {
+    "voice_commands": [
+      {
+        "triggers": ["stop", "halt", "be quiet", "shut up"],
+        "match": "exact",
+        "bypass_llm": true,
+        "handler": "hooks/stop.py",
+        "description": "Stop TTS and cancel generation"
+      }
+    ]
+  }
+}

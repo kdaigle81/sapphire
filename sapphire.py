@@ -128,6 +128,13 @@ class VoiceChatSystem:
         self.init_components()
         self._cleanup_orphaned_rag()
 
+        # Load plugins (hooks, voice commands, etc.)
+        try:
+            from core.plugin_loader import plugin_loader
+            plugin_loader.scan()
+        except Exception as e:
+            logger.error(f"Plugin loader failed: {e}", exc_info=True)
+
         logger.info(f"System init took: {(time.time() - start_time)*1000:.1f}ms")
 
     @property

@@ -7,6 +7,7 @@ import config
 from .chat_tool_calling import strip_ui_markers, wrap_tool_result
 from .llm_providers import LLMResponse, get_generation_params
 from core.event_bus import publish, Events
+from core.hooks import hook_runner, HookEvent
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,23 @@ class StreamingChat:
 
             # Update story engine FIRST (before building messages) based on current settings
             self.main_chat._update_story_engine()
-            
+
+            # Plugin pre_chat hook — can modify input, bypass LLM, or stop propagation
+            if hook_runner.has_handlers("pre_chat"):
+                hook_event = HookEvent(input=user_input, config=config,
+                                       metadata={"system": self.main_chat.system})
+                hook_runner.fire("pre_chat", hook_event)
+                if hook_event.skip_llm:
+                    response = hook_event.response or ""
+                    if response:
+                        self.main_chat.session_manager.add_user_message(user_input)
+                        self.main_chat.session_manager.add_assistant_final(response)
+                        yield {"type": "content", "text": response}
+                    publish(Events.AI_TYPING_END)
+                    self.is_streaming = False
+                    return
+                user_input = hook_event.input  # may have been mutated
+
             messages = self.main_chat._build_base_messages(user_input, images=images, files=files)
 
             if not skip_user_message:
