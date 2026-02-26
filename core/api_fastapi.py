@@ -4231,7 +4231,22 @@ async def toggle_plugin(plugin_name: str, request: Request, _=Depends(require_lo
     with open(USER_PLUGINS_JSON, 'w') as f:
         json.dump(user_data, f, indent=2)
 
-    return {"status": "success", "plugin": plugin_name, "enabled": new_state, "reload_required": True}
+    # Live load/unload — no restart needed for backend plugins
+    reload_required = True
+    try:
+        from core.plugin_loader import plugin_loader
+        if plugin_name in plugin_loader._plugins:
+            if new_state:
+                plugin_loader._plugins[plugin_name]["enabled"] = True
+                plugin_loader._load_plugin(plugin_name)
+            else:
+                plugin_loader.unload_plugin(plugin_name)
+                plugin_loader._plugins[plugin_name]["enabled"] = False
+            reload_required = False
+    except Exception as e:
+        logger.warning(f"Live plugin toggle failed for {plugin_name}: {e}")
+
+    return {"status": "success", "plugin": plugin_name, "enabled": new_state, "reload_required": reload_required}
 
 
 @app.get("/api/webui/plugins/{plugin_name}/settings")

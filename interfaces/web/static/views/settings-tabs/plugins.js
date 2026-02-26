@@ -183,6 +183,7 @@ export default {
                 }
 
                 ctx.refreshSidebar();
+                window.dispatchEvent(new CustomEvent('functions-changed'));
                 ui.showToast(`${cached?.title || name} ${data.enabled ? 'enabled' : 'disabled'}`, 'success');
             } catch (err) {
                 // Revert checkbox

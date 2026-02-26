@@ -42,6 +42,9 @@ let saveTimer = null;
 export default {
     init(el) {
         container = el;
+        window.addEventListener('functions-changed', () => {
+            if (container?.offsetParent !== null) loadData().then(render);
+        });
     },
 
     async show() {
