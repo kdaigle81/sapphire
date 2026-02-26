@@ -1012,17 +1012,28 @@ class TestSwitchChatClearsStoryEngine:
 class TestSSHNoShellTrue:
     """SSH local execution must not use shell=True."""
 
+    @staticmethod
+    def _load_ssh_tool():
+        import importlib.util
+        from pathlib import Path
+        spec = importlib.util.spec_from_file_location(
+            "ssh_tool", Path(__file__).parent.parent / "plugins" / "ssh" / "tools" / "ssh_tool.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
     def test_run_local_uses_shlex_not_shell(self):
         """_run_local should use shlex.split, not shell=True."""
         import inspect
-        from functions.ssh_tool import _run_local
-        source = inspect.getsource(_run_local)
+        mod = self._load_ssh_tool()
+        source = inspect.getsource(mod._run_local)
         assert "shell=True" not in source, "shell=True still present in _run_local"
         assert "shlex.split" in source, "shlex.split not used in _run_local"
 
     def test_run_local_splits_command(self):
         """_run_local should properly split a command string."""
-        from functions.ssh_tool import _run_local
+        mod = self._load_ssh_tool()
+        _run_local = mod._run_local
         # echo is safe and universal — just verify it doesn't crash
         result, success = _run_local("echo hello world", timeout=5)
         assert "hello world" in result

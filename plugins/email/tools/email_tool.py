@@ -1,4 +1,4 @@
-# functions/email_tool.py
+# Email tool — plugin tool
 """
 Email tool — AI can read inbox and send email to whitelisted contacts.
 Privacy-first: AI never sees email addresses in get_inbox/get_recipients.
@@ -20,8 +20,6 @@ logger = logging.getLogger(__name__)
 
 ENABLED = True
 EMOJI = '📧'
-PLUGIN = 'email'
-
 AVAILABLE_FUNCTIONS = [
     'get_inbox',
     'read_email',

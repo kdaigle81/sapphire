@@ -1,4 +1,4 @@
-# functions/ssh_tool.py
+# SSH tool — plugin tool
 """
 SSH tool — AI can list servers and run commands on remote machines.
 Uses system `ssh` via subprocess. Servers configured in Settings → Plugins → SSH.
@@ -16,8 +16,6 @@ logger = logging.getLogger(__name__)
 
 ENABLED = True
 EMOJI = '🖥️'
-PLUGIN = 'ssh'
-
 AVAILABLE_FUNCTIONS = [
     'ssh_get_servers',
     'ssh_run_command',
@@ -92,7 +90,7 @@ DEFAULT_MAX_TIMEOUT = 120
 
 def _get_ssh_settings():
     """Load SSH plugin settings (output_limit, max_timeout, blacklist)."""
-    settings_file = Path(__file__).parent.parent / "user" / "webui" / "plugins" / "ssh.json"
+    settings_file = Path(__file__).parent.parent.parent.parent / "user" / "webui" / "plugins" / "ssh.json"
     if settings_file.exists():
         try:
             with open(settings_file, 'r', encoding='utf-8') as f:

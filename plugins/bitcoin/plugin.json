@@ -1,0 +1,10 @@
+{
+  "name": "bitcoin",
+  "version": "1.0.0",
+  "description": "Bitcoin wallet — check balance, send BTC, view transactions",
+  "author": "sapphire",
+  "priority": 50,
+  "capabilities": {
+    "tools": ["tools/bitcoin_tool.py"]
+  }
+}

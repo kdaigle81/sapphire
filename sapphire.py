@@ -128,10 +128,10 @@ class VoiceChatSystem:
         self.init_components()
         self._cleanup_orphaned_rag()
 
-        # Load plugins (hooks, voice commands, etc.)
+        # Load plugins (hooks, voice commands, tools, etc.)
         try:
             from core.plugin_loader import plugin_loader
-            plugin_loader.scan()
+            plugin_loader.scan(function_manager=self.llm_chat.function_manager)
         except Exception as e:
             logger.error(f"Plugin loader failed: {e}", exc_info=True)
 

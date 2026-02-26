@@ -15,25 +15,6 @@ from core.toolsets import toolset_manager
 logger = logging.getLogger(__name__)
 
 
-def _is_plugin_enabled(plugin_name):
-    """Check if a plugin is enabled by reading the user plugins config."""
-    try:
-        plugins_json = Path(__file__).parent.parent.parent / 'user' / 'webui' / 'plugins.json'
-        if not plugins_json.exists():
-            # No user overrides — check static defaults
-            static_json = Path(__file__).parent.parent.parent / 'interfaces' / 'web' / 'static' / 'plugins' / 'plugins.json'
-            if not static_json.exists():
-                return False
-            with open(static_json) as f:
-                data = json.load(f)
-            return plugin_name in data.get('enabled', [])
-        with open(plugins_json) as f:
-            data = json.load(f)
-        return plugin_name in data.get('enabled', [])
-    except Exception:
-        return False
-
-
 # Per-context scope isolation — each thread/async-task gets its own values
 scope_memory:   ContextVar[str]  = ContextVar('scope_memory',   default='default')
 scope_goal:     ContextVar[str]  = ContextVar('scope_goal',     default='default')
@@ -63,7 +44,6 @@ class FunctionManager:
         self._network_functions = set()  # Function names that require network access
         self._is_local_map = {}  # function_name -> is_local value (True, False, or "endpoint")
         self._function_module_map = {}  # function_name -> module_name (for endpoint lookups)
-        self._function_plugin_map = {}  # function_name -> plugin_name (for plugin gate)
         
         # Story engine for games/simulations (None = disabled)
         self._story_engine = None
@@ -119,7 +99,6 @@ class FunctionManager:
                     executor = getattr(module, 'execute', None)
                     mode_filter = getattr(module, 'MODE_FILTER', None)
                     emoji = getattr(module, 'EMOJI', '')
-                    plugin = getattr(module, 'PLUGIN', None)
 
                     if not tools or not executor:
                         logger.warning(f"Module '{module_name}' missing TOOLS or execute()")
@@ -143,17 +122,14 @@ class FunctionManager:
                         tool_help = getattr(module, 'SETTINGS_HELP', None)
                         sm.register_tool_settings(module_name, tool_settings, tool_help)
                     
-                    # Track network functions, is_local, and plugin gate (per-tool flags)
+                    # Track network functions, is_local (per-tool flags)
                     for tool in tools:
                         func_name = tool['function']['name']
                         if tool.get('network', False):
                             self._network_functions.add(func_name)
-                        # Track is_local flag (True, False, or "endpoint" for conditional)
                         if 'is_local' in tool:
                             self._is_local_map[func_name] = tool['is_local']
                         self._function_module_map[func_name] = module_name
-                        if plugin:
-                            self._function_plugin_map[func_name] = plugin
                     
                     # Store mode filter if present
                     if mode_filter:
@@ -177,6 +153,120 @@ class FunctionManager:
                     
                 except Exception as e:
                     logger.error(f"Failed to load function module '{module_name}': {e}")
+
+    def register_plugin_tools(self, plugin_name: str, plugin_dir, tool_paths: list):
+        """Register tools from a plugin directory.
+
+        Args:
+            plugin_name: Plugin name for tracking
+            plugin_dir: Path to plugin root directory
+            tool_paths: List of relative paths to tool files (e.g., ["tools/ha.py"])
+        """
+        plugin_dir = Path(plugin_dir)
+
+        for tool_rel_path in tool_paths:
+            tool_path = plugin_dir / tool_rel_path
+            if not tool_path.exists():
+                logger.warning(f"Plugin '{plugin_name}' tool not found: {tool_path}")
+                continue
+
+            module_name = f"plugin_{plugin_name}_{tool_path.stem}"
+
+            try:
+                source = tool_path.read_text(encoding="utf-8")
+                namespace = {"__file__": str(tool_path), "__name__": module_name}
+                exec(compile(source, str(tool_path), "exec"), namespace)
+
+                if not namespace.get('ENABLED', True):
+                    logger.info(f"Plugin tool '{module_name}' is disabled")
+                    continue
+
+                tools = namespace.get('TOOLS', [])
+                executor = namespace.get('execute')
+
+                if not tools or not executor:
+                    logger.warning(f"Plugin tool '{tool_path}' missing TOOLS or execute()")
+                    continue
+
+                available_functions = namespace.get('AVAILABLE_FUNCTIONS')
+                if available_functions:
+                    tools = [t for t in tools if t['function']['name'] in available_functions]
+
+                emoji = namespace.get('EMOJI', '')
+                mode_filter = namespace.get('MODE_FILTER')
+
+                self.function_modules[module_name] = {
+                    'module': None,
+                    'tools': tools,
+                    'executor': executor,
+                    'available_functions': available_functions or [t['function']['name'] for t in tools],
+                    'emoji': emoji,
+                    '_plugin': plugin_name,
+                }
+
+                # Register tool-declared settings
+                tool_settings = namespace.get('SETTINGS')
+                if tool_settings and isinstance(tool_settings, dict):
+                    from core.settings_manager import settings as sm
+                    tool_help = namespace.get('SETTINGS_HELP')
+                    sm.register_tool_settings(module_name, tool_settings, tool_help)
+
+                # Track per-tool flags
+                for tool in tools:
+                    func_name = tool['function']['name']
+                    if tool.get('network', False):
+                        self._network_functions.add(func_name)
+                    if 'is_local' in tool:
+                        self._is_local_map[func_name] = tool['is_local']
+                    self._function_module_map[func_name] = module_name
+
+                if mode_filter:
+                    self._mode_filters[module_name] = mode_filter
+
+                # Dedup and add to all_possible_tools
+                existing_names = {t['function']['name'] for t in self.all_possible_tools}
+                for tool in tools:
+                    fname = tool['function']['name']
+                    if fname in existing_names:
+                        logger.warning(f"Duplicate tool '{fname}' from plugin '{plugin_name}' — skipping")
+                    else:
+                        self.all_possible_tools.append(tool)
+                        existing_names.add(fname)
+
+                for tool in tools:
+                    self.execution_map[tool['function']['name']] = executor
+
+                logger.info(f"Plugin '{plugin_name}' tool '{module_name}': {len(tools)} tools registered")
+
+            except Exception as e:
+                logger.error(f"Failed to load plugin tool '{tool_path}': {e}", exc_info=True)
+
+    def unregister_plugin_tools(self, plugin_name: str):
+        """Remove all tools belonging to a plugin."""
+        to_remove = [name for name, info in self.function_modules.items()
+                     if info.get('_plugin') == plugin_name]
+
+        for module_name in to_remove:
+            info = self.function_modules.pop(module_name, None)
+            if not info:
+                continue
+
+            func_names = set(info['available_functions'])
+
+            for fname in func_names:
+                self.execution_map.pop(fname, None)
+                self._network_functions.discard(fname)
+                self._is_local_map.pop(fname, None)
+                self._function_module_map.pop(fname, None)
+
+            self.all_possible_tools = [t for t in self.all_possible_tools
+                                       if t['function']['name'] not in func_names]
+            self._enabled_tools = [t for t in self._enabled_tools
+                                   if t['function']['name'] not in func_names]
+            self._mode_filters.pop(module_name, None)
+
+        if to_remove:
+            logger.info(f"Plugin '{plugin_name}' tools unregistered: {to_remove}")
 
     def _get_current_prompt_mode(self) -> str:
         """Get current prompt mode for filtering. Returns 'monolith' or 'assembled'."""
@@ -588,15 +678,6 @@ class FunctionManager:
             logger.info(f"Function '{function_name}' blocked by privacy mode: {error_msg}")
             self._log_tool_call(function_name, arguments, error_msg, time.time() - start_time, False)
             return error_msg
-
-        # Plugin gate — tools with PLUGIN metadata require their plugin to be enabled
-        required_plugin = self._function_plugin_map.get(function_name)
-        if required_plugin and not _is_plugin_enabled(required_plugin):
-            plugin_title = required_plugin.replace('_', ' ').title()
-            result = f"{plugin_title} is disabled. Tell the user to enable it in Settings → Plugins to use this tool."
-            logger.info(f"Function '{function_name}' blocked — plugin '{required_plugin}' not enabled")
-            self._log_tool_call(function_name, arguments, result, time.time() - start_time, False)
-            return result
 
         logger.info(f"Executing function: {function_name}")
         

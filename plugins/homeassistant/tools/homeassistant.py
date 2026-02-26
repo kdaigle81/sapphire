@@ -1,4 +1,4 @@
-# functions/homeassistant.py - Home Assistant Integration
+# Home Assistant Integration — plugin tool
 
 import requests
 import logging
@@ -8,7 +8,7 @@ import fnmatch
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 SETTINGS_FILE = os.path.join(PROJECT_ROOT, 'user', 'webui', 'plugins', 'homeassistant.json')
 
 DEFAULTS = {
@@ -19,8 +19,6 @@ DEFAULTS = {
 
 ENABLED = True
 EMOJI = '🏠'
-PLUGIN = 'homeassistant'
-
 AVAILABLE_FUNCTIONS = [
     'ha_list_scenes_and_scripts',
     'ha_activate',

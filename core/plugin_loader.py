@@ -72,9 +72,15 @@ class PluginLoader:
     def __init__(self):
         # {plugin_name: {manifest, path, enabled, band, state}}
         self._plugins: Dict[str, dict] = {}
+        self._function_manager = None  # Set via scan() for plugin tool loading
 
-    def scan(self):
-        """Discover all plugins and load enabled ones."""
+    def scan(self, function_manager=None):
+        """Discover all plugins and load enabled ones.
+
+        Args:
+            function_manager: Optional FunctionManager for plugin tool registration.
+        """
+        self._function_manager = function_manager
         self._plugins.clear()
         enabled_list = self._get_enabled_list()
 
@@ -192,6 +198,11 @@ class PluginLoader:
                     voice_match=voice_match
                 )
 
+        # Register tools with FunctionManager
+        tool_paths = capabilities.get("tools", [])
+        if tool_paths and self._function_manager:
+            self._function_manager.register_plugin_tools(name, plugin_dir, tool_paths)
+
         info["loaded"] = True
         logger.info(f"[PLUGINS] Loaded: {name} (priority {base_priority}, {band})")
 
@@ -237,8 +248,10 @@ class PluginLoader:
             return None
 
     def unload_plugin(self, name: str):
-        """Unload a plugin — deregister all hooks."""
+        """Unload a plugin — deregister all hooks and tools."""
         hook_runner.unregister_plugin(name)
+        if self._function_manager:
+            self._function_manager.unregister_plugin_tools(name)
         if name in self._plugins:
             self._plugins[name]["loaded"] = False
         logger.info(f"[PLUGINS] Unloaded: {name}")

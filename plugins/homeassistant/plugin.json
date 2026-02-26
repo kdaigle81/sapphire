@@ -1,0 +1,10 @@
+{
+  "name": "homeassistant",
+  "version": "1.0.0",
+  "description": "Home Assistant smart home integration — lights, switches, scenes, thermostat, notifications",
+  "author": "sapphire",
+  "priority": 50,
+  "capabilities": {
+    "tools": ["tools/homeassistant.py"]
+  }
+}

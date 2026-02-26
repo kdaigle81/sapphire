@@ -1,4 +1,4 @@
-# functions/bitcoin_tool.py
+# Bitcoin wallet tool — plugin tool
 """
 Bitcoin wallet tool — AI can check balance, receive address, send BTC, and view transactions.
 Uses the `bit` library for key management and blockchain interaction.
@@ -11,8 +11,6 @@ logger = logging.getLogger(__name__)
 
 ENABLED = True
 EMOJI = '₿'
-PLUGIN = 'bitcoin'
-
 AVAILABLE_FUNCTIONS = [
     'get_wallet',
     'send_bitcoin',

@@ -1,4 +1,4 @@
-# functions/toolmaker.py
+# Toolmaker — plugin tool
 """
 Tool creation tools — lets Sapphire create, read, and activate custom tools.
 Custom tools are saved to user/functions/ and loaded on next restart.
@@ -16,10 +16,9 @@ logger = logging.getLogger(__name__)
 
 ENABLED = True
 EMOJI = '🛠️'
-PLUGIN = 'toolmaker'
-
-_USER_FUNCTIONS = Path(__file__).parent.parent / "user" / "functions"
-_PLUGIN_SETTINGS = Path(__file__).parent.parent / "user" / "webui" / "plugins" / "toolmaker.json"
+_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+_USER_FUNCTIONS = _PROJECT_ROOT / "user" / "functions"
+_PLUGIN_SETTINGS = _PROJECT_ROOT / "user" / "webui" / "plugins" / "toolmaker.json"
 
 
 def _get_validation_level():
@@ -260,7 +259,7 @@ def _sanitize_name(name):
     if name.startswith('_'):
         return None
     # Block overwriting core tools
-    core_dir = Path(__file__).parent
+    core_dir = _PROJECT_ROOT / "functions"
     if (core_dir / f"{name}.py").exists():
         return None
     return name

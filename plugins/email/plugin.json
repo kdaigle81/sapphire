@@ -1,0 +1,10 @@
+{
+  "name": "email",
+  "version": "1.0.0",
+  "description": "Email integration — read inbox, send to whitelisted contacts via IMAP/SMTP",
+  "author": "sapphire",
+  "priority": 50,
+  "capabilities": {
+    "tools": ["tools/email_tool.py"]
+  }
+}

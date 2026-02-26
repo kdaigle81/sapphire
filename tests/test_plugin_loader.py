@@ -463,5 +463,323 @@ class TestQueryMethods:
         assert loader.get_plugin_info("nonexistent") is None
 
 
+# =============================================================================
+# Plugin Tool Loading Tests (Phase 3E)
+# =============================================================================
+
+def _make_tool_file(plugin_dir, rel_path, tools_list, execute_code="return 'ok', True"):
+    """Helper: create a tool .py file inside a plugin directory."""
+    full_path = plugin_dir / rel_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    tool_defs = repr(tools_list)
+    full_path.write_text(
+        f"TOOLS = {tool_defs}\n\n"
+        f"def execute(function_name, arguments, config):\n"
+        f"    {execute_code}\n",
+        encoding="utf-8"
+    )
+    return full_path
+
+
+def _make_mock_fm():
+    """Create a FunctionManager-like object with real register/unregister methods."""
+    from core.chat.function_manager import FunctionManager
+    fm = object.__new__(FunctionManager)
+    fm.function_modules = {}
+    fm.all_possible_tools = []
+    fm.execution_map = {}
+    fm._enabled_tools = []
+    fm._network_functions = set()
+    fm._is_local_map = {}
+    fm._function_module_map = {}
+    fm._function_plugin_map = {}
+    fm._mode_filters = {}
+    return fm
+
+
+SAMPLE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "test_tool",
+        "description": "A test tool",
+        "parameters": {"type": "object", "properties": {}}
+    }
+}
+
+SAMPLE_TOOL_2 = {
+    "type": "function",
+    "function": {
+        "name": "another_tool",
+        "description": "Another test tool",
+        "parameters": {"type": "object", "properties": {}}
+    }
+}
+
+
+class TestPluginToolRegistration:
+    def test_register_plugin_tools(self, temp_dirs):
+        fm = _make_mock_fm()
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "tool-plugin", {
+            "name": "tool-plugin", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/my_tool.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/my_tool.py", [SAMPLE_TOOL])
+
+        fm.register_plugin_tools("tool-plugin", plugin_dir, ["tools/my_tool.py"])
+
+        assert "test_tool" in fm.execution_map
+        tool_names = [t['function']['name'] for t in fm.all_possible_tools]
+        assert "test_tool" in tool_names
+
+    def test_register_multiple_tools(self, temp_dirs):
+        fm = _make_mock_fm()
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "multi-tool", {
+            "name": "multi-tool", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/combo.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/combo.py", [SAMPLE_TOOL, SAMPLE_TOOL_2])
+
+        fm.register_plugin_tools("multi-tool", plugin_dir, ["tools/combo.py"])
+
+        assert "test_tool" in fm.execution_map
+        assert "another_tool" in fm.execution_map
+        assert len(fm.all_possible_tools) == 2
+
+    def test_unregister_plugin_tools(self, temp_dirs):
+        fm = _make_mock_fm()
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "unreg-test", {
+            "name": "unreg-test", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/my_tool.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/my_tool.py", [SAMPLE_TOOL])
+
+        fm.register_plugin_tools("unreg-test", plugin_dir, ["tools/my_tool.py"])
+        assert "test_tool" in fm.execution_map
+
+        fm.unregister_plugin_tools("unreg-test")
+        assert "test_tool" not in fm.execution_map
+        assert len(fm.all_possible_tools) == 0
+
+    def test_unregister_clears_enabled_tools(self, temp_dirs):
+        fm = _make_mock_fm()
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "enabled-test", {
+            "name": "enabled-test", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/my_tool.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/my_tool.py", [SAMPLE_TOOL])
+
+        fm.register_plugin_tools("enabled-test", plugin_dir, ["tools/my_tool.py"])
+        # Simulate tools being enabled
+        fm._enabled_tools = list(fm.all_possible_tools)
+        assert len(fm._enabled_tools) == 1
+
+        fm.unregister_plugin_tools("enabled-test")
+        assert len(fm._enabled_tools) == 0
+
+    def test_missing_tool_file_no_crash(self, temp_dirs):
+        fm = _make_mock_fm()
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "missing-tool", {
+            "name": "missing-tool", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/nonexistent.py"]}
+        })
+
+        fm.register_plugin_tools("missing-tool", plugin_dir, ["tools/nonexistent.py"])
+        assert len(fm.all_possible_tools) == 0
+
+    def test_broken_tool_file_no_crash(self, temp_dirs):
+        fm = _make_mock_fm()
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "broken-tool", {
+            "name": "broken-tool", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/bad.py"]}
+        })
+        bad_path = plugin_dir / "tools"
+        bad_path.mkdir(exist_ok=True)
+        (bad_path / "bad.py").write_text("this is not valid python!!!", encoding="utf-8")
+
+        fm.register_plugin_tools("broken-tool", plugin_dir, ["tools/bad.py"])
+        assert len(fm.all_possible_tools) == 0
+
+    def test_tool_without_execute_skipped(self, temp_dirs):
+        fm = _make_mock_fm()
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "no-exec", {
+            "name": "no-exec", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/no_exec.py"]}
+        })
+        tools_dir = plugin_dir / "tools"
+        tools_dir.mkdir(exist_ok=True)
+        (tools_dir / "no_exec.py").write_text(
+            f"TOOLS = {json.dumps([SAMPLE_TOOL])}\n# no execute function\n",
+            encoding="utf-8"
+        )
+
+        fm.register_plugin_tools("no-exec", plugin_dir, ["tools/no_exec.py"])
+        assert len(fm.all_possible_tools) == 0
+
+    def test_duplicate_tool_name_skipped(self, temp_dirs):
+        fm = _make_mock_fm()
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "dup-test", {
+            "name": "dup-test", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/t1.py", "tools/t2.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/t1.py", [SAMPLE_TOOL])
+        _make_tool_file(plugin_dir, "tools/t2.py", [SAMPLE_TOOL])  # same name
+
+        fm.register_plugin_tools("dup-test", plugin_dir, ["tools/t1.py", "tools/t2.py"])
+        # Should only have one copy
+        assert len(fm.all_possible_tools) == 1
+
+    def test_tool_execution_works(self, temp_dirs):
+        fm = _make_mock_fm()
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "exec-test", {
+            "name": "exec-test", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/my_tool.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/my_tool.py", [SAMPLE_TOOL],
+                        execute_code="return f'executed {function_name}', True")
+
+        fm.register_plugin_tools("exec-test", plugin_dir, ["tools/my_tool.py"])
+        executor = fm.execution_map.get("test_tool")
+        assert executor is not None
+        result, success = executor("test_tool", {}, None)
+        assert result == "executed test_tool"
+        assert success is True
+
+    def test_network_flag_tracked(self, temp_dirs):
+        fm = _make_mock_fm()
+        net_tool = {
+            "type": "function",
+            "function": {"name": "net_tool", "description": "needs network",
+                         "parameters": {"type": "object", "properties": {}}},
+            "network": True
+        }
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "net-test", {
+            "name": "net-test", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/net.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/net.py", [net_tool])
+
+        fm.register_plugin_tools("net-test", plugin_dir, ["tools/net.py"])
+        assert "net_tool" in fm._network_functions
+
+
+class TestPluginToolIntegration:
+    """Test plugin tools through the full scan() pipeline."""
+
+    def test_scan_loads_plugin_tools(self, temp_dirs, runner):
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "scan-tool", {
+            "name": "scan-tool", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/scan_tool.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/scan_tool.py", [SAMPLE_TOOL])
+        temp_dirs["plugins_json"].write_text(
+            json.dumps({"enabled": ["scan-tool"]}), encoding="utf-8"
+        )
+
+        fm = _make_mock_fm()
+        loader = PluginLoader()
+        with patch("core.plugin_loader.SYSTEM_PLUGINS_DIR", temp_dirs["plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_DIR", temp_dirs["user_plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_JSON", temp_dirs["plugins_json"]), \
+             patch("core.plugin_loader.hook_runner", runner):
+            loader.scan(function_manager=fm)
+
+            assert "test_tool" in fm.execution_map
+            assert len(fm.all_possible_tools) == 1
+
+    def test_unload_removes_tools(self, temp_dirs, runner):
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "unload-tool", {
+            "name": "unload-tool", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/my_tool.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/my_tool.py", [SAMPLE_TOOL])
+        temp_dirs["plugins_json"].write_text(
+            json.dumps({"enabled": ["unload-tool"]}), encoding="utf-8"
+        )
+
+        fm = _make_mock_fm()
+        loader = PluginLoader()
+        with patch("core.plugin_loader.SYSTEM_PLUGINS_DIR", temp_dirs["plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_DIR", temp_dirs["user_plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_JSON", temp_dirs["plugins_json"]), \
+             patch("core.plugin_loader.hook_runner", runner):
+            loader.scan(function_manager=fm)
+            assert "test_tool" in fm.execution_map
+
+            loader.unload_plugin("unload-tool")
+            assert "test_tool" not in fm.execution_map
+            assert len(fm.all_possible_tools) == 0
+
+    def test_disabled_plugin_tools_not_loaded(self, temp_dirs, runner):
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "disabled-tool", {
+            "name": "disabled-tool", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/my_tool.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/my_tool.py", [SAMPLE_TOOL])
+        temp_dirs["plugins_json"].write_text(
+            json.dumps({"enabled": []}), encoding="utf-8"
+        )
+
+        fm = _make_mock_fm()
+        loader = PluginLoader()
+        with patch("core.plugin_loader.SYSTEM_PLUGINS_DIR", temp_dirs["plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_DIR", temp_dirs["user_plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_JSON", temp_dirs["plugins_json"]), \
+             patch("core.plugin_loader.hook_runner", runner):
+            loader.scan(function_manager=fm)
+
+            assert len(fm.all_possible_tools) == 0
+
+    def test_plugin_with_hooks_and_tools(self, temp_dirs, runner):
+        """Plugin can have both hooks and tools."""
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "combo", {
+            "name": "combo", "version": "1.0.0",
+            "capabilities": {
+                "hooks": {"pre_chat": "hooks/intercept.py"},
+                "tools": ["tools/my_tool.py"]
+            }
+        }, hooks_code={
+            "intercept.py": "def pre_chat(event): event.metadata['hooked'] = True"
+        })
+        _make_tool_file(plugin_dir, "tools/my_tool.py", [SAMPLE_TOOL])
+        temp_dirs["plugins_json"].write_text(
+            json.dumps({"enabled": ["combo"]}), encoding="utf-8"
+        )
+
+        fm = _make_mock_fm()
+        loader = PluginLoader()
+        with patch("core.plugin_loader.SYSTEM_PLUGINS_DIR", temp_dirs["plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_DIR", temp_dirs["user_plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_JSON", temp_dirs["plugins_json"]), \
+             patch("core.plugin_loader.hook_runner", runner):
+            loader.scan(function_manager=fm)
+
+            # Hook works
+            event = HookEvent()
+            runner.fire("pre_chat", event)
+            assert event.metadata.get("hooked") is True
+
+            # Tool registered
+            assert "test_tool" in fm.execution_map
+
+    def test_no_function_manager_skips_tools(self, temp_dirs, runner):
+        """If no function_manager passed, tools capability is ignored (no crash)."""
+        plugin_dir = _make_plugin(temp_dirs["plugins"], "no-fm", {
+            "name": "no-fm", "version": "1.0.0",
+            "capabilities": {"tools": ["tools/my_tool.py"]}
+        })
+        _make_tool_file(plugin_dir, "tools/my_tool.py", [SAMPLE_TOOL])
+        temp_dirs["plugins_json"].write_text(
+            json.dumps({"enabled": ["no-fm"]}), encoding="utf-8"
+        )
+
+        loader = PluginLoader()
+        with patch("core.plugin_loader.SYSTEM_PLUGINS_DIR", temp_dirs["plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_DIR", temp_dirs["user_plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_JSON", temp_dirs["plugins_json"]), \
+             patch("core.plugin_loader.hook_runner", runner):
+            loader.scan()  # no function_manager — should not crash
+            assert "no-fm" in loader.get_loaded_plugins()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
