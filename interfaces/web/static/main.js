@@ -281,6 +281,7 @@ function initEventBus() {
     });
 
     eventBus.on(eventBus.Events.TTS_STOPPED, () => {
+        audio.stop(true);
         audio.setLocalTtsPlaying(false);
         updateMicButtonState();
     });

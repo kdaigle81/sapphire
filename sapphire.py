@@ -413,15 +413,8 @@ class VoiceChatSystem:
         try:
             clean_query = self._clean_text(query)
 
-            if clean_query == "stop":
-                logger.info("Stop command detected, stopping TTS")
-                self.tts.stop()
-                return
-
-            if clean_query == "reset":
-                logger.info("Reset command detected, resetting chat")
-                self.reset_chat()
-                return
+            # "stop" and "reset" now handled by plugins via hook system
+            # (plugins/stop, plugins/reset)
 
             response_text = self.llm_chat.chat(query)
 
