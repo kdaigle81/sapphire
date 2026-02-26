@@ -4249,6 +4249,14 @@ async def toggle_plugin(plugin_name: str, request: Request, _=Depends(require_lo
     return {"status": "success", "plugin": plugin_name, "enabled": new_state, "reload_required": reload_required}
 
 
+@app.post("/api/plugins/rescan")
+async def rescan_plugins(_=Depends(require_login)):
+    """Scan for newly added plugin folders without restart."""
+    from core.plugin_loader import plugin_loader
+    new_plugins = plugin_loader.rescan()
+    return {"status": "ok", "new_plugins": new_plugins}
+
+
 @app.post("/api/plugins/{plugin_name}/reload")
 async def reload_plugin(plugin_name: str, _=Depends(require_login)):
     """Hot-reload a plugin (unload + load). For development."""

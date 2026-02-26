@@ -1,0 +1,18 @@
+{
+  "name": "reset",
+  "version": "1.0.0",
+  "description": "Voice Command: Reset — clear current chat history",
+  "author": "sapphire",
+  "priority": 1,
+  "capabilities": {
+    "voice_commands": [
+      {
+        "triggers": ["reset", "reset chat", "clear chat", "clear history"],
+        "match": "exact",
+        "bypass_llm": true,
+        "handler": "hooks/reset.py",
+        "description": "Clear current chat history"
+      }
+    ]
+  }
+}

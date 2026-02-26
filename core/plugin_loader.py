@@ -309,6 +309,51 @@ class PluginLoader:
         """Set the continuity scheduler for plugin schedule tasks."""
         self._scheduler = scheduler
 
+    def rescan(self):
+        """Scan for new plugins without disturbing already-loaded ones.
+
+        Returns list of newly discovered plugin names.
+        """
+        enabled_list = self._get_enabled_list()
+        existing = set(self._plugins.keys())
+        new_found = []
+
+        for directory, band in [(SYSTEM_PLUGINS_DIR, "system"), (USER_PLUGINS_DIR, "user")]:
+            if not directory.exists():
+                continue
+            for child in sorted(directory.iterdir()):
+                if not child.is_dir():
+                    continue
+                manifest_path = child / "plugin.json"
+                if not manifest_path.exists():
+                    continue
+                try:
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                name = manifest.get("name", child.name)
+                if name in existing:
+                    continue
+                if not self._validate_manifest(name, manifest):
+                    continue
+
+                self._plugins[name] = {
+                    "manifest": manifest,
+                    "path": child,
+                    "enabled": name in enabled_list,
+                    "band": band,
+                    "loaded": False,
+                }
+                new_found.append(name)
+
+                if name in enabled_list:
+                    self._load_plugin(name)
+                    logger.info(f"[PLUGINS] Rescan: loaded new plugin '{name}'")
+
+        if new_found:
+            logger.info(f"[PLUGINS] Rescan found {len(new_found)} new: {new_found}")
+        return new_found
+
     # ── Query methods ──
 
     def get_plugin_names(self) -> List[str]:
