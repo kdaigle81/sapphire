@@ -581,15 +581,6 @@ class LLMChat:
                     )
                     tool_call_count += tools_executed
 
-                    # Track last tool name
-                    if tool_calls_to_execute:
-                        last_tool_name = tool_calls_to_execute[0]["function"]["name"]
-                        
-                        # Exit immediately after chat reset
-                        if last_tool_name == "end_and_reset_chat":
-                            logger.info("[RESET] Chat reset detected, ending without final response")
-                            return "Chat history has been reset."
-
                     logger.info(f"Tool execution iteration {i+1} completed")
                     continue
 
@@ -1000,8 +991,6 @@ class LLMChat:
                     )
                     tool_call_count += tools_executed
                     logger.info(f"[ISOLATED] Loop {i+1}: executed {tools_executed} tools (total: {tool_call_count})")
-                    if tool_calls and tool_calls[0]["function"]["name"] == "end_and_reset_chat":
-                        return "Chat reset (no effect in background mode)."
                     continue
 
                 elif response_msg.content:

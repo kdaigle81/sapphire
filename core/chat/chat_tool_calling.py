@@ -213,7 +213,7 @@ class ToolCallingEngine:
                     wrapped_msg = wrap_tool_result(tool_call["id"], function_name, error_result)
                 messages.append(wrapped_msg)
                 
-                if history and function_name != "end_and_reset_chat":
+                if history:
                     history.add_tool_result(tool_call["id"], function_name, error_result)
                 continue
 
@@ -236,14 +236,11 @@ class ToolCallingEngine:
             logger.debug(f"   Message role: {wrapped_msg['role']}")
             logger.debug(f"   Content preview: {str(wrapped_msg.get('content', ''))[:100]}")
             
-            # Don't save reset tool result - history is about to be wiped anyway
-            if history and function_name != "end_and_reset_chat":
+            if history:
                 logger.info(f"[SAVE] Saving tool result for: {function_name}")
                 history.add_tool_result(tool_call["id"], function_name, result_str, inputs=function_args)
-            elif not history:
-                logger.debug(f"[ISOLATED] No history manager, skipping save for: {function_name}")
             else:
-                logger.info(f"[RESET] Skipping history save for reset tool")
+                logger.debug(f"[ISOLATED] No history manager, skipping save for: {function_name}")
 
             tools_executed += 1
             logger.info(f"[OK] Executed tool: {function_name}")
@@ -300,13 +297,10 @@ class ToolCallingEngine:
             wrapped_msg = wrap_tool_result(tool_call_id, function_name, clean_result)
         messages.append(wrapped_msg)
         
-        # Don't save reset tool result
-        if history and function_name != "end_and_reset_chat":
+        if history:
             history.add_tool_result(tool_call_id, function_name, result_str, inputs=function_args)
-        elif not history:
-            logger.debug(f"[ISOLATED] No history manager, skipping save for: {function_name}")
         else:
-            logger.info(f"[RESET] Skipping history save for reset tool")
+            logger.debug(f"[ISOLATED] No history manager, skipping save for: {function_name}")
         
         logger.info(f"[OK] Executed text-based tool: {function_name}")
         return tool_call_id

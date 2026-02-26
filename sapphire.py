@@ -54,8 +54,6 @@ try:
     from core.settings_manager import settings
     from core.ssl_utils import get_ssl_context
     import config
-    import string
-    import re
     import uvicorn
 except Exception as e:
     logger.critical(f"FATAL: Import error during startup: {e}", exc_info=True)
@@ -387,11 +385,6 @@ class VoiceChatSystem:
                 self.tts = NullTTS()
             return True
 
-    def reset_chat(self):
-        self.llm_chat.reset()
-        self.tts.speak("reset.")
-        logger.info("Chat history reset")
-        
     def speak_error(self, error_type):
         error_messages = {
             'file': "File creation error",
@@ -401,21 +394,11 @@ class VoiceChatSystem:
         }
         self.tts.speak(error_messages.get(error_type, "Error"))
 
-    def _clean_text(self, text: str) -> str:
-        text = text.lower()
-        text = text.translate(str.maketrans('', '', string.punctuation))
-        return text.strip()
-
     def process_llm_query(self, query, skip_tts=False):
         if not self._processing_lock.acquire(timeout=0.5):
             logger.warning("process_llm_query: already processing, skipping duplicate")
             return None
         try:
-            clean_query = self._clean_text(query)
-
-            # "stop" and "reset" now handled by plugins via hook system
-            # (plugins/stop, plugins/reset)
-
             response_text = self.llm_chat.chat(query)
 
             if response_text:

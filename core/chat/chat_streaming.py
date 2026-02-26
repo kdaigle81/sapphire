@@ -411,18 +411,12 @@ class StreamingChat:
                             messages.append(wrapped_msg)
                             logger.info(f"[OK] [STREAMING] Tool {function_name} executed successfully")
                             
-                            if function_name != "end_and_reset_chat":
-                                self.main_chat.session_manager.add_tool_result(
-                                    tool_call_id,
-                                    function_name,
-                                    result_str,
-                                    inputs=function_args
-                                )
-                            
-                            if function_name == "end_and_reset_chat":
-                                logger.info("[RESET] [STREAMING] Chat reset detected")
-                                yield {"type": "reload"}
-                                return
+                            self.main_chat.session_manager.add_tool_result(
+                                tool_call_id,
+                                function_name,
+                                result_str,
+                                inputs=function_args
+                            )
 
                         except Exception as tool_error:
                             logger.error(f"Tool execution error: {tool_error}", exc_info=True)
@@ -445,13 +439,12 @@ class StreamingChat:
                             )
                             messages.append(wrapped_msg)
 
-                            if function_name != "end_and_reset_chat":
-                                self.main_chat.session_manager.add_tool_result(
-                                    tool_call_id,
-                                    function_name,
-                                    error_result,
-                                    inputs=function_args
-                                )
+                            self.main_chat.session_manager.add_tool_result(
+                                tool_call_id,
+                                function_name,
+                                error_result,
+                                inputs=function_args
+                            )
                     
                     if self.cancel_flag:
                         break
