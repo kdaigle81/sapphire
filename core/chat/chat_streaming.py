@@ -505,6 +505,14 @@ class StreamingChat:
                     if force_prefill:
                         full_content = force_prefill + full_content
 
+                    # post_llm hook — plugins can mutate response before save + TTS
+                    if hook_runner.has_handlers("post_llm"):
+                        llm_event = hook_runner.fire("post_llm", HookEvent(
+                            input=user_input, response=full_content,
+                            config=config, metadata={"system": self.main_chat.system}
+                        ))
+                        full_content = llm_event.response or full_content
+
                     # Save final response with thinking separated
                     self.main_chat.session_manager.add_assistant_final(
                         content=full_content,
@@ -594,20 +602,24 @@ class StreamingChat:
                 
                 if final_content:
                     full_final = (force_prefill or "") + final_content
-                    self.main_chat.session_manager.add_assistant_final(
-                        content=full_final,
-                        thinking=final_thinking if final_thinking else None,
-                        metadata=final_metadata
-                    )
-                    _post_response = full_final
                 else:
-                    fallback = f"I used {tool_call_count} tools and gathered information."
-                    yield {"type": "content", "text": fallback}
-                    self.main_chat.session_manager.add_assistant_final(
-                        content=fallback,
-                        metadata=final_metadata
-                    )
-                    _post_response = fallback
+                    full_final = f"I used {tool_call_count} tools and gathered information."
+                    yield {"type": "content", "text": full_final}
+
+                # post_llm hook — plugins can mutate forced-final response
+                if hook_runner.has_handlers("post_llm"):
+                    llm_event = hook_runner.fire("post_llm", HookEvent(
+                        input=user_input, response=full_final,
+                        config=config, metadata={"system": self.main_chat.system}
+                    ))
+                    full_final = llm_event.response or full_final
+
+                self.main_chat.session_manager.add_assistant_final(
+                    content=full_final,
+                    thinking=final_thinking if final_thinking and final_content else None,
+                    metadata=final_metadata
+                )
+                _post_response = full_final
 
                 if hook_runner.has_handlers("post_chat"):
                     hook_runner.fire("post_chat", HookEvent(

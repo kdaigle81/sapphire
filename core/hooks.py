@@ -18,18 +18,30 @@ class HookEvent:
 
     Handlers can mutate any field. Changes are visible to subsequent handlers.
 
+    Hook points (in pipeline order):
+        post_stt:      After voice transcription — mutate `input` to correct STT
+        on_wake:       Wakeword detected — notification only (must return fast)
+        pre_chat:      Before LLM — mutate `input`, set `skip_llm`/`response` to bypass
+        prompt_inject: During prompt build — append to `context_parts`
+        post_llm:      After LLM response, before save — mutate `response` to filter/translate
+        post_chat:     After response saved — observational (`input`, `response`)
+        pre_execute:   Before tool call — mutate `arguments`, block with `skip_llm`
+        post_execute:  After tool call — observational (`function_name`, `result`)
+        pre_tts:       Before speech — mutate `tts_text`, cancel with `skip_tts`
+        post_tts:      After playback — observational (`tts_text`, metadata has `duration`)
+
     Fields:
-        input: User's message text (mutable by pre_chat hooks)
+        input: User's message / STT transcription (mutable in post_stt, pre_chat)
         skip_llm: Set True to bypass LLM entirely (voice commands, cached responses)
         response: Direct response text when skip_llm is True / post_chat final response
         context_parts: Append strings to inject into system prompt (prompt_inject hooks)
         stop_propagation: Set True to prevent lower-priority hooks from firing
         config: System config object (read-only by convention)
-        metadata: Arbitrary data plugins can pass between hooks
+        metadata: Arbitrary data — may include 'system' (VoiceChatSystem instance)
         function_name: Tool name for pre_execute/post_execute hooks
         arguments: Tool arguments for pre_execute (mutable — plugins can modify)
         result: Tool result for post_execute
-        tts_text: Text about to be spoken for pre_tts (mutable)
+        tts_text: Text about to be spoken for pre_tts (mutable) / spoken text for post_tts
         skip_tts: Set True in pre_tts to cancel TTS entirely
         ephemeral: Set True with skip_llm to show response without persisting to history
     """

@@ -418,6 +418,14 @@ class TTSClient:
             else:
                 logger.debug(f"[TTS] Playback complete: {duration:.1f}s")
 
+            # post_tts hook — plugins can react to completed/stopped playback
+            from core.hooks import hook_runner, HookEvent
+            if hook_runner.has_handlers("post_tts"):
+                hook_runner.fire("post_tts", HookEvent(
+                    tts_text=text, config=config,
+                    metadata={"duration": duration, "stopped_early": stopped_early}
+                ))
+
         except Exception as e:
             logger.error(f"Error in TTS playback: {e}", exc_info=True)
         finally:

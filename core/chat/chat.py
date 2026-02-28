@@ -650,6 +650,14 @@ class LLMChat:
                     "tokens_per_second": round(tokens_info.get("content", 0) / duration, 1) if duration > 0 else 0
                 }
                 
+                # post_llm hook — plugins can mutate response before save + TTS
+                if hook_runner.has_handlers("post_llm"):
+                    llm_event = hook_runner.fire("post_llm", HookEvent(
+                        input=user_input, response=final_response_content,
+                        config=config, metadata={"system": self.system}
+                    ))
+                    final_response_content = llm_event.response or final_response_content
+
                 self.session_manager.add_assistant_final(final_response_content, metadata=metadata)
 
                 if hook_runner.has_handlers("post_chat"):
@@ -708,6 +716,14 @@ class LLMChat:
                 "tokens": tokens_info,
                 "tokens_per_second": round(tokens_info.get("content", 0) / duration, 1) if duration > 0 else 0
             }
+
+            # post_llm hook — plugins can mutate forced-final response
+            if hook_runner.has_handlers("post_llm"):
+                llm_event = hook_runner.fire("post_llm", HookEvent(
+                    input=user_input, response=final_response_content,
+                    config=config, metadata={"system": self.system}
+                ))
+                final_response_content = llm_event.response or final_response_content
 
             self.session_manager.add_assistant_final(final_response_content, metadata=metadata)
 

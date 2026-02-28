@@ -217,6 +217,11 @@ class WakeWordDetector:
 
         publish(Events.WAKEWORD_DETECTED)
 
+        # on_wake hook — plugins can react to wakeword detection
+        from core.hooks import hook_runner, HookEvent
+        if hook_runner.has_handlers("on_wake"):
+            hook_runner.fire("on_wake", HookEvent(config=config))
+
         if self.system:
             self.wake_word_detected()
         else:
@@ -274,6 +279,14 @@ class WakeWordDetector:
                 logger.warning("No speech detected")
                 self.system.speak_error('speech')
                 return
+
+            # post_stt hook — plugins can correct/translate/normalize transcription
+            from core.hooks import hook_runner, HookEvent
+            if hook_runner.has_handlers("post_stt"):
+                stt_event = HookEvent(input=text, config=config,
+                                      metadata={"system": self.system})
+                hook_runner.fire("post_stt", stt_event)
+                text = stt_event.input
 
             logger.info(f"Transcribed: user text hidden")
             self.system.process_llm_query(text)

@@ -903,5 +903,135 @@ class TestRemoveFromEnabledList:
             assert data["custom_key"] == 42
 
 
+# =============================================================================
+# Hook Point Tests (post_stt, post_llm, post_tts, on_wake)
+# =============================================================================
+
+class TestNewHookPoints:
+    """Test the 4 new hook points work through the HookRunner."""
+
+    def test_post_stt_mutates_input(self, runner):
+        """post_stt handlers can correct STT transcription."""
+        def fix_stt(event):
+            event.input = event.input.replace("creme", "Krem")
+
+        runner.register("post_stt", fix_stt, priority=50, plugin_name="stt-fix")
+        event = HookEvent(input="hello creme")
+        runner.fire("post_stt", event)
+        assert event.input == "hello Krem"
+
+    def test_post_llm_mutates_response(self, runner):
+        """post_llm handlers can filter/translate AI responses."""
+        def clean_mode(event):
+            event.response = event.response.replace("damn", "darn")
+
+        runner.register("post_llm", clean_mode, priority=50, plugin_name="clean")
+        event = HookEvent(response="well damn, that worked")
+        runner.fire("post_llm", event)
+        assert event.response == "well darn, that worked"
+
+    def test_post_llm_none_response_safe(self, runner):
+        """post_llm handles None response gracefully."""
+        def noop(event):
+            pass  # doesn't touch response
+
+        runner.register("post_llm", noop, priority=50, plugin_name="noop")
+        event = HookEvent(response=None)
+        runner.fire("post_llm", event)
+        assert event.response is None
+
+    def test_post_tts_receives_text(self, runner):
+        """post_tts handlers can read what was spoken."""
+        spoken = []
+        def log_speech(event):
+            spoken.append(event.tts_text)
+
+        runner.register("post_tts", log_speech, priority=50, plugin_name="tts-log")
+        event = HookEvent(tts_text="Hello world", metadata={"duration": 1.5, "stopped_early": False})
+        runner.fire("post_tts", event)
+        assert spoken == ["Hello world"]
+        assert event.metadata["duration"] == 1.5
+
+    def test_on_wake_fires(self, runner):
+        """on_wake handlers receive notification."""
+        woke = []
+        def on_wake(event):
+            woke.append(True)
+
+        runner.register("on_wake", on_wake, priority=50, plugin_name="wake-test")
+        event = HookEvent()
+        runner.fire("on_wake", event)
+        assert woke == [True]
+
+    def test_post_llm_priority_order(self, runner):
+        """Multiple post_llm handlers fire in priority order."""
+        def add_prefix(event):
+            event.response = "[filtered] " + (event.response or "")
+
+        def add_suffix(event):
+            event.response = (event.response or "") + " [end]"
+
+        runner.register("post_llm", add_prefix, priority=10, plugin_name="prefix")
+        runner.register("post_llm", add_suffix, priority=90, plugin_name="suffix")
+        event = HookEvent(response="hello")
+        runner.fire("post_llm", event)
+        assert event.response == "[filtered] hello [end]"
+
+    def test_post_stt_stop_propagation(self, runner):
+        """post_stt respects stop_propagation."""
+        def first(event):
+            event.input = "intercepted"
+            event.stop_propagation = True
+
+        def second(event):
+            event.input = "should not reach"
+
+        runner.register("post_stt", first, priority=10, plugin_name="first")
+        runner.register("post_stt", second, priority=90, plugin_name="second")
+        event = HookEvent(input="original")
+        runner.fire("post_stt", event)
+        assert event.input == "intercepted"
+
+    def test_post_llm_error_isolation(self, runner):
+        """A buggy post_llm handler doesn't crash the pipeline."""
+        def buggy(event):
+            raise RuntimeError("oops")
+
+        def good(event):
+            event.response = "cleaned"
+
+        runner.register("post_llm", buggy, priority=10, plugin_name="buggy")
+        runner.register("post_llm", good, priority=90, plugin_name="good")
+        event = HookEvent(response="original")
+        runner.fire("post_llm", event)
+        assert event.response == "cleaned"  # good handler still ran
+
+    def test_plugin_with_post_llm_hook(self, temp_dirs, runner):
+        """Full integration: plugin registers post_llm via manifest and scan."""
+        _make_plugin(temp_dirs["plugins"], "llm-filter", {
+            "name": "llm-filter",
+            "version": "1.0.0",
+            "capabilities": {
+                "hooks": {
+                    "post_llm": "hooks/filter.py"
+                }
+            }
+        }, hooks_code={
+            "filter.py": "def post_llm(event):\n    event.response = event.response.upper() if event.response else None"
+        })
+        temp_dirs["plugins_json"].write_text(
+            json.dumps({"enabled": ["llm-filter"]}), encoding="utf-8"
+        )
+        loader = PluginLoader()
+        with patch("core.plugin_loader.SYSTEM_PLUGINS_DIR", temp_dirs["plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_DIR", temp_dirs["user_plugins"]), \
+             patch("core.plugin_loader.USER_PLUGINS_JSON", temp_dirs["plugins_json"]), \
+             patch("core.plugin_loader.hook_runner", runner):
+            loader.scan()
+            event = HookEvent(response="hello world")
+            runner.fire("post_llm", event)
+            assert event.response == "HELLO WORLD"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
