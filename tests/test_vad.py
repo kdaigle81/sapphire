@@ -19,6 +19,15 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+
+def _has_stt_deps():
+    """Check if STT deps are importable (find_spec can raise ValueError on broken __spec__)."""
+    import importlib.util
+    try:
+        return all(importlib.util.find_spec(m) is not None for m in ['sounddevice', 'soundfile', 'numpy'])
+    except (ValueError, ModuleNotFoundError):
+        return False
+
 RECORDER_SOURCE = (PROJECT_ROOT / "core" / "stt" / "recorder.py").read_text(encoding='utf-8')
 
 
@@ -275,10 +284,7 @@ class TestAdaptiveThreshold:
         assert 'max(' in RECORDER_SOURCE
 
     @pytest.mark.skipif(
-        not all(
-            __import__('importlib').util.find_spec(m)
-            for m in ['sounddevice', 'soundfile', 'numpy']
-        ),
+        not _has_stt_deps(),
         reason="STT dependencies not installed"
     )
     def test_threshold_never_below_floor(self):

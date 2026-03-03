@@ -4954,6 +4954,10 @@ a.gallery-caption:hover {
     background: rgba(46,160,67,0.15);
     color: #3fb950;
 }
+.plugin-toggle-badge.author {
+    background: rgba(56,139,253,0.15);
+    color: #388bfd;
+}
 .plugin-toggle-badge.unsigned {
     background: rgba(210,153,34,0.15);
     color: #d2992a;

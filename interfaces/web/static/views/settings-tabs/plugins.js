@@ -124,12 +124,19 @@ export default {
                 ${visible.map(p => {
                     const locked = ctx.lockedPlugins.includes(p.name);
                     let verifyBadge = '';
-                    if (p.verified === true) {
-                        verifyBadge = '<span class="plugin-toggle-badge verified">Signed</span>';
-                    } else if (p.verify_msg === 'unsigned') {
+                    const tier = p.verify_tier;
+                    if (tier === 'official') {
+                        verifyBadge = '<span class="plugin-toggle-badge verified">Official</span>';
+                    } else if (tier === 'verified_author') {
+                        const authorName = p.verified_author || 'Unknown';
+                        verifyBadge = `<span class="plugin-toggle-badge author">Verified Author (${authorName})</span>`;
+                    } else if (tier === 'unsigned' || (!tier && p.verify_msg === 'unsigned')) {
                         verifyBadge = '<span class="plugin-toggle-badge unsigned">Unsigned</span>';
-                    } else if (p.verified === false && p.verify_msg && p.verify_msg !== 'unsigned') {
-                        verifyBadge = `<span class="plugin-toggle-badge failed">Tampered</span>`;
+                    } else if (tier === 'failed' || (!tier && p.verified === false && p.verify_msg && p.verify_msg !== 'unsigned')) {
+                        verifyBadge = '<span class="plugin-toggle-badge failed">Tampered</span>';
+                    } else if (!tier && p.verified === true) {
+                        // Fallback for old API without verify_tier
+                        verifyBadge = '<span class="plugin-toggle-badge verified">Official</span>';
                     }
                     const meta = [];
                     if (p.version) meta.push(`v${p.version}`);

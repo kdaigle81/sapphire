@@ -142,7 +142,7 @@ class PluginLoader:
             is_enabled = name in enabled_list or manifest.get("default_enabled", False)
 
             # Verify signature on discovery (before any code loads)
-            verified, verify_msg = verify_plugin(child)
+            verified, verify_msg, verify_meta = verify_plugin(child)
 
             self._plugins[name] = {
                 "manifest": manifest,
@@ -152,6 +152,8 @@ class PluginLoader:
                 "loaded": False,
                 "verified": verified,
                 "verify_msg": verify_msg,
+                "verify_tier": verify_meta.get("tier", "unsigned"),
+                "verified_author": verify_meta.get("author"),
             }
             logger.debug(f"[PLUGINS] Found: {name} ({band}, enabled={is_enabled}, {verify_msg})")
 
@@ -531,7 +533,7 @@ class PluginLoader:
                     if not self._validate_manifest(name, manifest):
                         continue
 
-                    verified, verify_msg = verify_plugin(child)
+                    verified, verify_msg, verify_meta = verify_plugin(child)
                     is_enabled = name in enabled_list or manifest.get("default_enabled", False)
 
                     self._plugins[name] = {
@@ -542,6 +544,8 @@ class PluginLoader:
                         "loaded": False,
                         "verified": verified,
                         "verify_msg": verify_msg,
+                        "verify_tier": verify_meta.get("tier", "unsigned"),
+                        "verified_author": verify_meta.get("author"),
                     }
                 new_found.append(name)
 
@@ -611,6 +615,8 @@ class PluginLoader:
             "loaded": info.get("loaded", False),
             "verified": info.get("verified"),
             "verify_msg": info.get("verify_msg"),
+            "verify_tier": info.get("verify_tier", "unsigned"),
+            "verified_author": info.get("verified_author"),
         }
 
     def get_all_plugin_info(self) -> List[dict]:

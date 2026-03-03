@@ -4370,6 +4370,8 @@ async def list_plugins(request: Request, _=Depends(require_login)):
                     "settings_schema": settings_schema,
                     "verified": info.get("verified"),
                     "verify_msg": info.get("verify_msg"),
+                    "verify_tier": info.get("verify_tier", "unsigned"),
+                    "verified_author": info.get("verified_author"),
                     "url": manifest.get("url"),
                     "version": manifest.get("version"),
                     "author": manifest.get("author"),
