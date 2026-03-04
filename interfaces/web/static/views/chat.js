@@ -365,7 +365,7 @@ async function loadSidebar() {
     if (!chatName) return;
 
     try {
-        const [settingsResp, initData, llmResp, scopesResp, goalScopesResp, knowledgeScopesResp, peopleScopesResp, emailAccountsResp, bitcoinWalletsResp, presetsResp, spiceSetsResp, personasResp, ttsVoicesResp] = await Promise.allSettled([
+        const [settingsResp, initData, llmResp, scopesResp, goalScopesResp, knowledgeScopesResp, peopleScopesResp, emailAccountsResp, bitcoinWalletsResp, presetsResp, spiceSetsResp, personasResp, ttsVoicesResp, toolsetCurrentResp] = await Promise.allSettled([
             api.getChatSettings(chatName),
             getInitData(),
             fetch('/api/llm/providers').then(r => r.ok ? r.json() : null),
@@ -378,7 +378,8 @@ async function loadSidebar() {
             fetch('/api/story/presets').then(r => r.ok ? r.json() : null),
             fetch('/api/spice-sets').then(r => r.ok ? r.json() : null),
             fetch('/api/personas').then(r => r.ok ? r.json() : null),
-            fetch('/api/tts/voices').then(r => r.ok ? r.json() : null)
+            fetch('/api/tts/voices').then(r => r.ok ? r.json() : null),
+            fetch('/api/toolsets/current').then(r => r.ok ? r.json() : null)
         ]);
 
         // Guard: if chat changed while fetching, discard stale results
@@ -427,6 +428,17 @@ async function loadSidebar() {
                 .map(t => `<option value="${t.name}">${t.name} (${t.function_count})</option>`)
                 .join('');
             setSelect(toolsetSel, settings.toolset || settings.ability || 'all');
+        }
+
+        // Patch toolset label with live story tool count
+        const liveToolset = toolsetCurrentResp.status === 'fulfilled' ? toolsetCurrentResp.value : null;
+        if (toolsetSel && liveToolset?.story_tools > 0) {
+            const selected = toolsetSel.options[toolsetSel.selectedIndex];
+            if (selected) {
+                const name = liveToolset.name || selected.value;
+                const total = liveToolset.function_count || 0;
+                selected.textContent = `${name} + Story (${total})`;
+            }
         }
 
         // Populate spice set dropdown (fresh from API, not cached init)
