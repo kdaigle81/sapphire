@@ -578,12 +578,19 @@ class ClaudeProvider(BaseProvider):
     
     @staticmethod
     def _sanitize_tool_id(tool_id: str) -> str:
-        """Sanitize tool call ID to match Claude's required pattern: ^[a-zA-Z0-9_-]+$"""
-        import re
+        """Sanitize tool call ID to match Claude's required pattern.
+
+        Foreign provider IDs (chatcmpl-tool-*, call_*, etc.) are deterministically
+        remapped to toolu_* so tool_use/tool_result pairs stay matched.
+        """
+        import re, hashlib
         if not tool_id:
             return f"toolu_{uuid.uuid4().hex[:24]}"
-        sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', tool_id)
-        return sanitized or f"toolu_{uuid.uuid4().hex[:24]}"
+        if tool_id.startswith('toolu_'):
+            return tool_id
+        # Remap foreign IDs deterministically — same input always gives same output
+        h = hashlib.sha256(tool_id.encode()).hexdigest()[:24]
+        return f"toolu_{h}"
 
     def _convert_messages(self, messages: List[Dict[str, Any]]) -> tuple:
         """
