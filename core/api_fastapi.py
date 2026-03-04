@@ -1993,7 +1993,7 @@ async def set_socks_credential(request: Request, _=Depends(require_login)):
 async def delete_socks_credential(request: Request, _=Depends(require_login)):
     """Delete SOCKS credentials."""
     from core.credentials_manager import credentials
-    if credentials.delete_socks_credentials():
+    if credentials.clear_socks_credentials():
         return {"status": "success"}
     else:
         raise HTTPException(status_code=500, detail="Failed to delete credentials")
@@ -4598,6 +4598,11 @@ async def install_plugin(
         author = manifest.get("author", "unknown")
         if not name or not version or not description:
             raise HTTPException(status_code=400, detail="plugin.json must have name, version, and description")
+
+        # Sanitize name — block path traversal
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', name):
+            raise HTTPException(status_code=400, detail=f"Invalid plugin name: '{name}'. Only alphanumeric, dash, underscore allowed.")
 
         # ── Name collision checks ──
         # Block system plugins

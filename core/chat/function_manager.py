@@ -170,6 +170,11 @@ class FunctionManager:
 
         for tool_rel_path in tool_paths:
             tool_path = plugin_dir / tool_rel_path
+            try:
+                tool_path.resolve().relative_to(plugin_dir.resolve())
+            except ValueError:
+                logger.error(f"Plugin '{plugin_name}' path traversal blocked: {tool_rel_path}")
+                continue
             if not tool_path.exists():
                 logger.warning(f"Plugin '{plugin_name}' tool not found: {tool_path}")
                 continue

@@ -49,7 +49,7 @@ _BLOCKED_IMPORTS = {
     'socket', 'signal', 'importlib',
 }
 
-_BLOCKED_CALLS = {'eval', 'exec', '__import__', 'compile', 'globals', 'locals'}
+_BLOCKED_CALLS = {'eval', 'exec', '__import__', 'compile', 'globals', 'locals', 'getattr', 'setattr', 'delattr', 'open'}
 
 _BLOCKED_ATTRS = {
     ('os', 'system'), ('os', 'popen'), ('os', 'exec'), ('os', 'execv'),

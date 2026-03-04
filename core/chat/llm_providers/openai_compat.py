@@ -191,10 +191,9 @@ class OpenAICompatProvider(BaseProvider):
             model_lower.startswith('o3')
         )
 
-        # Detect Grok 4+ models (don't support penalty params or stop)
-        is_grok4 = (
-            model_lower.startswith('grok-4') or
-            model_lower.startswith('grok-code')
+        # Detect Grok models (don't support penalty params or stop)
+        is_grok = (
+            model_lower.startswith('grok-')
         )
 
         if is_reasoning_model:
@@ -212,7 +211,7 @@ class OpenAICompatProvider(BaseProvider):
             if removed:
                 logger.debug(f"Filtered unsupported params for {self.model}: {removed}")
 
-        elif is_grok4:
+        elif is_grok:
             removed = []
             for unsupported in ['presence_penalty', 'frequency_penalty', 'stop']:
                 if unsupported in result:

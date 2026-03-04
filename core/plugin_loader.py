@@ -307,6 +307,11 @@ class PluginLoader:
             return None
 
         full_path = plugin_dir / handler_path
+        try:
+            full_path.resolve().relative_to(plugin_dir.resolve())
+        except ValueError:
+            logger.error(f"[PLUGINS] Path traversal blocked in handler: {handler_path}")
+            return None
         if not full_path.exists():
             logger.warning(f"[PLUGINS] Handler not found: {full_path}")
             return None
