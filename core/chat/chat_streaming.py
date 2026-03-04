@@ -65,8 +65,10 @@ class StreamingChat:
             from core.prompt_state import is_current_prompt_private
             from core.privacy import is_privacy_mode
             if is_current_prompt_private() and not is_privacy_mode():
-                yield {"type": "error", "text": "This prompt requires Privacy Mode to be enabled."}
-                return
+                chat_settings = self.main_chat.session_manager.get_chat_settings()
+                if not chat_settings.get('private_chat', False):
+                    yield {"type": "error", "text": "This prompt requires Privacy Mode to be enabled."}
+                    return
         except ImportError:
             pass
 

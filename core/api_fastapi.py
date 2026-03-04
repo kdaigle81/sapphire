@@ -733,7 +733,7 @@ async def get_unified_status(request: Request, _=Depends(require_login), system=
         prompt_state = prompts.get_current_state()
         prompt_name = prompts.get_active_preset_name()
         prompt_char_count = prompts.get_prompt_char_count()
-        prompt_privacy_required = prompts.is_current_prompt_private()
+        prompt_privacy_required = prompts.is_current_prompt_private() and not chat_settings.get('private_chat', False)
         is_assembled = prompts.is_assembled_mode()
 
         function_names = system.llm_chat.function_manager.get_enabled_function_names()
