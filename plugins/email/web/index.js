@@ -254,6 +254,7 @@ function injectStyles() {
 
 let _container = null;
 let _accounts = [];
+let _editingScope = null;
 
 
 async function loadAccounts() {
@@ -275,6 +276,7 @@ async function loadAccounts() {
 
 function renderAccountList(container) {
   _container = container;
+  _editingScope = null;
 
   const items = _accounts.map(a => `
     <div class="email-account-item" data-scope="${a.scope}">
@@ -320,6 +322,7 @@ function renderAccountList(container) {
 // ─── Account Editor View ────────────────────────────────────────────────────
 
 function renderAccountEditor(container, scope, acct) {
+  _editingScope = scope;
   const s = acct || {};
 
   container.innerHTML = `
@@ -368,7 +371,6 @@ function renderAccountEditor(container, scope, acct) {
       </div>
 
       <div class="email-row" style="gap:12px">
-        <button type="button" class="email-test-btn" id="email-save-btn">Save</button>
         <button type="button" class="email-test-btn" id="email-test-btn">Test</button>
         ${acct ? '<button type="button" class="email-clear-btn" id="email-delete-btn">Delete</button>' : ''}
       </div>
@@ -376,57 +378,8 @@ function renderAccountEditor(container, scope, acct) {
   `;
 
   container.querySelector('#email-back').addEventListener('click', () => renderAccountList(container));
-  container.querySelector('#email-save-btn').addEventListener('click', () => saveAccount(container, scope));
   container.querySelector('#email-test-btn').addEventListener('click', () => testAccount(container, scope));
   container.querySelector('#email-delete-btn')?.addEventListener('click', () => deleteAccount(container, scope));
-}
-
-
-async function saveAccount(container, scope) {
-  const address = container.querySelector('#email-address')?.value?.trim() || '';
-  const app_password = container.querySelector('#email-password')?.value?.trim() || '';
-  const imap_server = container.querySelector('#email-imap')?.value?.trim() || 'imap.gmail.com';
-  const smtp_server = container.querySelector('#email-smtp')?.value?.trim() || 'smtp.gmail.com';
-  const imap_port = parseInt(container.querySelector('#email-imap-port')?.value) || 993;
-  const smtp_port = parseInt(container.querySelector('#email-smtp-port')?.value) || 465;
-
-  if (!address) {
-    alert('Email address is required');
-    return;
-  }
-
-  const payload = { address, imap_server, smtp_server, imap_port, smtp_port };
-  if (app_password) payload.app_password = app_password;
-
-  const btn = container.querySelector('#email-save-btn');
-  btn.disabled = true;
-  btn.textContent = 'Saving...';
-
-  try {
-    const res = await fetch(`/api/email/accounts/${encodeURIComponent(scope)}`, {
-      method: 'PUT',
-      headers: csrfHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (data.success) {
-      btn.textContent = '\u2713 Saved';
-      btn.className = 'email-test-btn success';
-      // Update password status
-      const status = container.querySelector('#email-pw-status');
-      if (status) { status.textContent = '\u2713 Stored'; status.className = 'email-pw-status stored'; }
-      // Refresh list
-      await loadAccounts();
-      setTimeout(() => { btn.textContent = 'Save'; btn.className = 'email-test-btn'; btn.disabled = false; }, 2000);
-    } else {
-      throw new Error(data.detail || 'Save failed');
-    }
-  } catch (e) {
-    btn.textContent = '\u2717 Error';
-    btn.className = 'email-test-btn error';
-    btn.title = e.message;
-    setTimeout(() => { btn.textContent = 'Save'; btn.className = 'email-test-btn'; btn.disabled = false; btn.title = ''; }, 3000);
-  }
 }
 
 
@@ -529,14 +482,43 @@ function renderForm(container, settings) {
 
 
 async function saveSettings(settings) {
-  // Individual account saves happen in the editor — nothing to do here
-  return { success: true };
+  if (!settings || !settings.scope) return { success: true };
+  const { scope, ...payload } = settings;
+
+  const res = await fetch(`/api/email/accounts/${encodeURIComponent(scope)}`, {
+    method: 'PUT',
+    headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.detail || 'Save failed');
+
+  // Update password status badge
+  if (_container) {
+    const status = _container.querySelector('#email-pw-status');
+    if (status) { status.textContent = '\u2713 Stored'; status.className = 'email-pw-status stored'; }
+  }
+  await loadAccounts();
+  return data;
 }
 
 
 function getFormSettings(container) {
-  // No form-level settings to collect — accounts are saved individually
-  return {};
+  if (!_editingScope) return null;
+  const address = container.querySelector('#email-address')?.value?.trim() || '';
+  if (!address) return null;
+
+  const payload = {
+    scope: _editingScope,
+    address,
+    imap_server: container.querySelector('#email-imap')?.value?.trim() || 'imap.gmail.com',
+    smtp_server: container.querySelector('#email-smtp')?.value?.trim() || 'smtp.gmail.com',
+    imap_port: parseInt(container.querySelector('#email-imap-port')?.value) || 993,
+    smtp_port: parseInt(container.querySelector('#email-smtp-port')?.value) || 465
+  };
+  const pw = container.querySelector('#email-password')?.value?.trim();
+  if (pw) payload.app_password = pw;
+  return payload;
 }
 
 
