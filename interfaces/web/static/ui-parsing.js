@@ -420,14 +420,14 @@ const processInlineMarkdown = (html) => {
     
     // Images: ![alt](url) - MUST be before links
     // Balanced parens in URL for Wikipedia etc, tolerates space between ] and (
-    html = html.replace(/!\[([^\]]*)\]\s*\(((?:[^()]*|\([^)]*\))*)\)/g, (m, alt, url) => {
+    html = html.replace(/!\[([^\]]*)\]\s*\(([^()]*(?:\([^)]*\)[^()]*)*)\)/g, (m, alt, url) => {
         url = url.trim().replace(/ /g, '%20');
         if (/^https?:\/\//i.test(url)) return `<img src="${url}" alt="${alt}" class="chat-img">`;
         return m;
     });
 
     // Links: [text](url) - block javascript:, data:, vbscript: schemes
-    html = html.replace(/\[([^\]]+)\]\s*\(((?:[^()]*|\([^)]*\))*)\)/g, (m, text, url) => {
+    html = html.replace(/\[([^\]]+)\]\s*\(([^()]*(?:\([^)]*\)[^()]*)*)\)/g, (m, text, url) => {
         url = url.trim().replace(/ /g, '%20');
         if (/^(https?:\/\/|mailto:)/i.test(url)) return `<a href="${url}" target="_blank" rel="noopener">${text}</a>`;
         return m;
