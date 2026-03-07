@@ -36,6 +36,7 @@ let dynamicTabs = [];
 let pluginList = [];
 let lockedPlugins = [];
 let mobileMenuCleanup = null;
+let managed = false;
 
 export default {
     init(el) { container = el; },
@@ -57,6 +58,7 @@ async function loadData() {
         settings = settingsData.settings || {};
         overrides = settingsData.user_overrides || [];
         help = helpData.help || {};
+        managed = settingsData.managed || false;
 
         await Promise.all([loadThemes(), loadWakewordModels(), loadProviderMeta(), loadPluginList()]);
         // custom-tools tab removed — plugin manifest settings is the one path now
@@ -142,11 +144,15 @@ function syncDynamicTabs() {
     }));
 }
 
+const MANAGED_HIDDEN_TABS = new Set(['audio', 'wakeword', 'system', 'network']);
+
 function getAllTabs() {
     // Insert dynamic tabs between plugins and system
-    const idx = STATIC_TABS.findIndex(t => t.id === 'system');
-    const before = STATIC_TABS.slice(0, idx);
-    const after = STATIC_TABS.slice(idx);
+    let tabs = STATIC_TABS;
+    if (managed) tabs = tabs.filter(t => !MANAGED_HIDDEN_TABS.has(t.id));
+    const idx = tabs.findIndex(t => t.id === 'system');
+    const before = idx >= 0 ? tabs.slice(0, idx) : tabs;
+    const after = idx >= 0 ? tabs.slice(idx) : [];
     return [...before, ...dynamicTabs, ...after];
 }
 
@@ -267,7 +273,7 @@ function renderTabContent() {
 
 function createCtx() {
     return {
-        settings, help, overrides, pendingChanges,
+        settings, help, overrides, pendingChanges, managed,
         wakewordModels, availableThemes, avatarPaths, providerMeta,
         pluginList, lockedPlugins,
         renderFields, renderAccordion, renderInput, formatLabel,

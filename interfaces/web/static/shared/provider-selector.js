@@ -10,14 +10,15 @@
  */
 
 export function renderProviderTab(tabConfig, ctx) {
-    const current = _currentProvider(tabConfig, ctx);
-    const providerDef = tabConfig.providers[current] || tabConfig.providers.none;
+    const effective = _filterProviders(tabConfig, ctx);
+    const current = _currentProvider(effective, ctx);
+    const providerDef = effective.providers[current] || effective.providers.none;
 
-    let html = _renderDropdown(tabConfig, current, ctx);
+    let html = _renderDropdown(effective, current, ctx);
 
     if (current === 'none') {
         html += `<p class="setting-help" style="padding:12px 0;opacity:0.7">
-            ${tabConfig.disabledMessage || 'Disabled. Select a provider above to enable.'}
+            ${effective.disabledMessage || 'Disabled. Select a provider above to enable.'}
         </p>`;
         return html;
     }
@@ -28,17 +29,17 @@ export function renderProviderTab(tabConfig, ctx) {
     }
 
     // Common fields (shared across all active providers)
-    if (tabConfig.commonKeys?.length) {
-        html += ctx.renderFields(tabConfig.commonKeys);
+    if (effective.commonKeys?.length) {
+        html += ctx.renderFields(effective.commonKeys);
     }
 
     // Advanced: provider-specific + common
     const advKeys = [
         ...(providerDef.advancedKeys || []),
-        ...(tabConfig.commonAdvancedKeys || [])
+        ...(effective.commonAdvancedKeys || [])
     ];
     if (advKeys.length) {
-        html += ctx.renderAccordion(`${tabConfig.providerKey}-adv`, advKeys);
+        html += ctx.renderAccordion(`${effective.providerKey}-adv`, advKeys);
     }
 
     return html;
@@ -72,6 +73,20 @@ export function attachProviderListeners(tabConfig, ctx, el, tabModule) {
 }
 
 // ── Internal ──
+
+// Providers hidden in managed mode (local hardware — not available in Docker)
+const MANAGED_HIDE = new Set(['faster_whisper', 'kokoro', 'local']);
+// Providers hidden when NOT managed (internal routing — not useful for self-hosted)
+const UNMANAGED_HIDE = new Set(['sapphire_router']);
+
+function _filterProviders(tabConfig, ctx) {
+    const hide = ctx.managed ? MANAGED_HIDE : UNMANAGED_HIDE;
+    const filtered = {};
+    for (const [key, val] of Object.entries(tabConfig.providers)) {
+        if (!hide.has(key)) filtered[key] = val;
+    }
+    return { ...tabConfig, providers: filtered };
+}
 
 function _currentProvider(tabConfig, ctx) {
     // Pending change takes priority over saved setting

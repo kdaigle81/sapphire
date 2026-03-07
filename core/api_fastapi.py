@@ -1677,7 +1677,13 @@ async def get_all_settings(request: Request, _=Depends(require_login)):
             if any(key.upper().endswith(s) for s in _SENSITIVE_SUFFIXES) and all_settings[key]:
                 all_settings[key] = '••••••••'
         user_overrides = settings.get_user_overrides()
-        return {"settings": all_settings, "user_overrides": list(user_overrides.keys()), "count": len(all_settings)}
+        return {
+            "settings": all_settings,
+            "user_overrides": list(user_overrides.keys()),
+            "count": len(all_settings),
+            "managed": settings.is_managed(),
+            "unrestricted": settings.is_unrestricted(),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1723,6 +1729,12 @@ async def update_settings_batch(request: Request, _=Depends(require_login)):
     persist = data.get('persist', True)
     # Skip masked values sent back by frontend (don't overwrite real secrets with dots)
     settings_dict = {k: v for k, v in settings_dict.items() if v != '••••••••'}
+    # Filter out locked keys in managed mode
+    if settings.is_managed():
+        locked = [k for k in settings_dict if settings.is_locked(k)]
+        if locked:
+            logger.warning(f"[MANAGED] Batch: filtered locked keys: {locked}")
+        settings_dict = {k: v for k, v in settings_dict.items() if not settings.is_locked(k)}
     results = []
     # Defer provider switches until after all settings are applied
     # (e.g. API key must be in config before provider init reads it)
@@ -1884,6 +1896,8 @@ async def update_setting(key: str, request: Request, _=Depends(require_login)):
     """Update a setting."""
     from core.settings_manager import settings
     from core.socks_proxy import clear_session_cache
+    if settings.is_locked(key):
+        raise HTTPException(status_code=403, detail=f"Setting '{key}' is locked in managed mode")
     data = await request.json()
     if data is None or 'value' not in data:
         raise HTTPException(status_code=400, detail="Missing 'value'")
@@ -4518,6 +4532,10 @@ async def install_plugin(
     _=Depends(require_login),
 ):
     """Install a plugin from GitHub URL or zip upload."""
+    from core.settings_manager import settings
+    # Block zip uploads in managed mode (GitHub installs OK — signing gate handles security)
+    if settings.is_managed() and file:
+        raise HTTPException(status_code=403, detail="Zip upload is disabled in managed mode")
     import shutil
     import zipfile
     import re

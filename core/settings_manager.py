@@ -155,12 +155,14 @@ class SettingsManager:
         if 'PRIVACY_MODE' not in self._config and 'PRIVACY_MODE' not in self._runtime:
             self._config['PRIVACY_MODE'] = self._config.get('START_IN_PRIVACY_MODE', False)
 
-        # Managed mode: disable LM Studio (no local server in Docker)
+        # Managed mode: lock down for Docker resale
         if os.environ.get('SAPPHIRE_MANAGED'):
             providers = self._config.get('LLM_PROVIDERS', {})
-            if 'lmstudio' in providers:
-                providers['lmstudio']['enabled'] = False
-                providers['lmstudio']['use_as_fallback'] = False
+            providers.pop('lmstudio', None)
+            self._config['PRIVACY_MODE'] = False
+            self._config['WAKE_WORD_ENABLED'] = False
+            if not os.environ.get('SAPPHIRE_UNRESTRICTED'):
+                self._config['ALLOW_UNSIGNED_PLUGINS'] = False
 
         # Environment variable overrides (Docker/managed deployments)
         _env_overrides = [
@@ -221,15 +223,40 @@ class SettingsManager:
         with self._lock:
             return self._config.get(key, default)
     
+    # Settings locked in managed mode (env var only)
+    MANAGED_LOCKED_KEYS = {
+        'STT_PROVIDER', 'TTS_PROVIDER', 'EMBEDDING_PROVIDER',
+        'SAPPHIRE_ROUTER_URL', 'SAPPHIRE_ROUTER_TENANT_ID',
+        'WEB_UI_HOST', 'WEB_UI_PORT', 'WEB_UI_SSL_ADHOC',
+        'WAKE_WORD_ENABLED', 'AUDIO_INPUT_DEVICE', 'AUDIO_OUTPUT_DEVICE',
+        'ALLOW_UNSIGNED_PLUGINS', 'PRIVACY_MODE',
+    }
+
+    def is_managed(self):
+        return bool(os.environ.get('SAPPHIRE_MANAGED'))
+
+    def is_unrestricted(self):
+        return bool(os.environ.get('SAPPHIRE_UNRESTRICTED'))
+
+    def is_locked(self, key):
+        if not self.is_managed():
+            return False
+        if key == 'ALLOW_UNSIGNED_PLUGINS' and self.is_unrestricted():
+            return False
+        return key in self.MANAGED_LOCKED_KEYS
+
     def set(self, key, value, persist=False):
         """
         Set a setting value.
-        
+
         Args:
             key: Setting key
             value: New value
             persist: If True, save to user/settings.json
         """
+        if self.is_locked(key):
+            logger.warning(f"[MANAGED] Blocked write to locked setting: {key}")
+            return
         with self._lock:
             self._config[key] = value
             if persist:
