@@ -7,6 +7,7 @@ import {
     refreshProviderKeyStatus, updateCardEnabledState, toggleProviderCollapse,
     handleModelSelectChange, runTestConnection
 } from '../../shared/llm-providers.js';
+import { showToast } from '../../shared/toast.js';
 
 let generationProfiles = {};
 let providerMetadata = {};
@@ -67,8 +68,13 @@ export default {
         // Enable toggle
         el.querySelectorAll('.provider-enabled').forEach(t => {
             t.addEventListener('change', async e => {
-                await updateProvider(e.target.dataset.provider, { enabled: e.target.checked });
-                updateCardEnabledState(e.target.closest('.provider-card'), e.target.checked);
+                try {
+                    await updateProvider(e.target.dataset.provider, { enabled: e.target.checked });
+                    updateCardEnabledState(e.target.closest('.provider-card'), e.target.checked);
+                } catch (err) {
+                    showToast('Failed to update provider', 'error');
+                    e.target.checked = !e.target.checked;
+                }
             });
         });
 
@@ -79,21 +85,27 @@ export default {
                 const field = e.target.dataset.field;
                 if (field === 'model_select') return;
 
-                if (field === 'api_key') {
-                    if (e.target.value.trim()) {
-                        await updateProvider(key, { api_key: e.target.value });
-                        e.target.value = '';
-                        e.target.placeholder = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
-                        refreshProviderKeyStatus(el);
+                try {
+                    if (field === 'api_key') {
+                        if (e.target.value.trim()) {
+                            await updateProvider(key, { api_key: e.target.value });
+                            e.target.value = '';
+                            e.target.placeholder = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+                            refreshProviderKeyStatus(el);
+                            showToast('API key saved', 'success', 2000);
+                        }
+                        return;
                     }
-                    return;
-                }
 
-                let value = e.target.value;
-                if (field === 'timeout') value = parseFloat(value) || 5;
-                if (['use_as_fallback', 'thinking_enabled', 'cache_enabled'].includes(field)) value = e.target.checked;
-                if (field === 'thinking_budget') value = parseInt(value) || 10000;
-                await updateProvider(key, { [field]: value });
+                    let value = e.target.value;
+                    if (field === 'timeout') value = parseFloat(value) || 5;
+                    if (['use_as_fallback', 'thinking_enabled', 'cache_enabled'].includes(field)) value = e.target.checked;
+                    if (field === 'thinking_budget') value = parseInt(value) || 10000;
+                    await updateProvider(key, { [field]: value });
+                    showToast('Provider settings saved', 'success', 2000);
+                } catch (err) {
+                    showToast('Failed to save provider settings', 'error');
+                }
             });
         });
 
@@ -113,7 +125,12 @@ export default {
                 const card = input.closest('.provider-card');
                 const model = card.querySelector('.generation-params-section')?.dataset.model;
                 if (!model) return;
-                generationProfiles = await saveGenerationParams(model, collectGenParamsFromCard(card), generationProfiles);
+                try {
+                    generationProfiles = await saveGenerationParams(model, collectGenParamsFromCard(card), generationProfiles);
+                    showToast('Model params saved', 'success', 2000);
+                } catch (e) {
+                    showToast('Failed to save model params', 'error');
+                }
             });
         });
 

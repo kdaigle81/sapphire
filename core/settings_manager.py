@@ -476,7 +476,8 @@ class SettingsManager:
         # Hot-reload: These are read per-request, no restart needed
         hot_reload = {
             'DEFAULT_USERNAME',
-            'GENERATION_DEFAULTS', 'LLM_MAX_HISTORY', 'CONTEXT_LIMIT',
+            'GENERATION_DEFAULTS', 'MODEL_GENERATION_PROFILES',
+            'LLM_MAX_HISTORY', 'CONTEXT_LIMIT',
             'FORCE_THINKING', 'THINKING_PREFILL',
             'LLM_PROVIDERS', 'LLM_FALLBACK_ORDER', 'LLM_REQUEST_TIMEOUT',
             # SOCKS can be hot-reloaded - session cache is cleared on change
