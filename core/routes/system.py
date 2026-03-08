@@ -352,7 +352,8 @@ async def check_packages(request: Request, _=Depends(require_login)):
 @router.get("/api/setup/wizard-step")
 async def get_wizard_step(request: Request, _=Depends(require_login)):
     """Get wizard step."""
-    managed = bool(os.environ.get('SAPPHIRE_MANAGED'))
+    from core.settings_manager import settings as sm
+    managed = sm.is_managed()
     return {"step": getattr(config, 'SETUP_WIZARD_STEP', 'complete'), "managed": managed}
 
 

@@ -809,7 +809,8 @@ async def create_chat(request: Request, _=Depends(require_login), system=Depends
 @router.post("/api/chats/private")
 async def create_private_chat(request: Request, _=Depends(require_login), system=Depends(get_system)):
     """Create a permanently private chat (privacy enforced, no toggle)."""
-    if os.environ.get('SAPPHIRE_MANAGED'):
+    from core.settings_manager import settings as sm
+    if sm.is_managed():
         raise HTTPException(status_code=403, detail="Private chats are disabled in managed mode")
     try:
         data = await request.json() or {}

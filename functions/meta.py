@@ -687,8 +687,12 @@ def execute(function_name, arguments, config):
 
         elif function_name == "get_time":
             from datetime import datetime
-            now = datetime.now()
-            return now.strftime("%A, %B %d, %Y at %I:%M:%S %p"), True
+            from zoneinfo import ZoneInfo
+            tz_name = getattr(app_config, 'USER_TIMEZONE', 'UTC') or 'UTC'
+            user_tz = ZoneInfo(tz_name)
+            now = datetime.now(user_tz)
+            tz_label = tz_name if tz_name != 'UTC' else 'UTC'
+            return f"{now.strftime('%A, %B %d, %Y at %I:%M:%S %p')} ({tz_label})", True
 
         # === Monolith-only tools ===
 

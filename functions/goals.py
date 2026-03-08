@@ -510,8 +510,14 @@ def delete_goal_api(goal_id, cascade=True):
 
 def _time_ago(timestamp_str):
     try:
+        from zoneinfo import ZoneInfo
+        import config as cfg
+        tz_name = getattr(cfg, 'USER_TIMEZONE', 'UTC') or 'UTC'
+        user_tz = ZoneInfo(tz_name)
         ts = datetime.fromisoformat(timestamp_str)
-        diff = datetime.now() - ts
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=ZoneInfo('UTC'))
+        diff = datetime.now(user_tz) - ts
         days = diff.days
         hours = diff.seconds // 3600
         minutes = (diff.seconds % 3600) // 60

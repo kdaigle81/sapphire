@@ -58,7 +58,8 @@ ALLOWED_STRICT = {
 
 
 def is_managed():
-    return bool(os.environ.get('SAPPHIRE_MANAGED'))
+    from core.settings_manager import settings
+    return settings.is_managed()
 
 
 def validate_code(code, strictness='strict'):

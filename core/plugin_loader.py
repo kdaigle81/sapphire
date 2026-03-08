@@ -85,6 +85,11 @@ class PluginLoader:
         # Route registry: {plugin_name: [(method, compiled_regex, param_names, handler_func), ...]}
         self._routes: Dict[str, list] = {}
 
+    def _is_managed(self):
+        """Check if running in managed/Docker mode (single source of truth)."""
+        from core.settings_manager import settings
+        return settings.is_managed()
+
     def scan(self, function_manager=None):
         """Discover all plugins and load enabled ones.
 
@@ -143,7 +148,7 @@ class PluginLoader:
                 continue
 
             # Skip plugins hidden in managed mode
-            if manifest.get("managed_hide") and os.environ.get('SAPPHIRE_MANAGED'):
+            if manifest.get("managed_hide") and self._is_managed():
                 logger.debug(f"[PLUGINS] Skipping {name} (managed_hide)")
                 continue
 
@@ -210,7 +215,7 @@ class PluginLoader:
 
             if allow_unsigned:
                 logger.warning(f"[PLUGINS] {name}: unsigned plugin (sideloading enabled)")
-            elif os.environ.get('SAPPHIRE_MANAGED'):
+            elif self._is_managed():
                 # Managed mode: validate code instead of requiring signature
                 from core.code_validator import validate_plugin_files
                 ok, err = validate_plugin_files(info["path"], strictness='strict')
@@ -573,7 +578,7 @@ class PluginLoader:
                         continue
 
                     # Skip plugins hidden in managed mode
-                    if manifest.get("managed_hide") and os.environ.get('SAPPHIRE_MANAGED'):
+                    if manifest.get("managed_hide") and self._is_managed():
                         logger.debug(f"[PLUGINS] Rescan: skipping {name} (managed_hide)")
                         continue
 

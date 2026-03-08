@@ -40,6 +40,12 @@ STATIC_DIR = PROJECT_ROOT / "interfaces" / "web" / "static"
 USER_PUBLIC_DIR = PROJECT_ROOT / "user" / "public"
 
 
+def _is_managed():
+    """Check if running in managed/Docker mode."""
+    from core.settings_manager import settings
+    return settings.is_managed()
+
+
 def _build_import_map():
     """Build ES module import map — versions every JS file so browsers cache-bust on restart."""
     imports = {}
@@ -236,7 +242,7 @@ async def index(request: Request, _=Depends(require_login)):
         "csrf_token": lambda: csrf_token,
         "v": BOOT_VERSION,
         "app_version": APP_VERSION,
-        "managed": bool(os.environ.get('SAPPHIRE_MANAGED')),
+        "managed": _is_managed(),
         "import_map": IMPORT_MAP
     })
 

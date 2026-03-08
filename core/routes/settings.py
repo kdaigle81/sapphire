@@ -496,6 +496,8 @@ async def set_privacy_status(request: Request, _=Depends(require_login)):
 async def set_start_in_privacy(request: Request, _=Depends(require_login)):
     """Set start in privacy mode."""
     from core.settings_manager import settings
+    if settings.is_locked('START_IN_PRIVACY_MODE'):
+        raise HTTPException(status_code=403, detail="Setting is locked in managed mode")
     data = await request.json()
     enabled = data.get('enabled', False)
     settings.set('START_IN_PRIVACY_MODE', enabled, persist=True)

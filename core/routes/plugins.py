@@ -577,7 +577,8 @@ async def update_plugin_settings(plugin_name: str, request: Request, _=Depends(r
     settings = data.get("settings", data)
 
     # Block toolmaker trust mode in managed mode
-    if plugin_name == 'toolmaker' and os.environ.get('SAPPHIRE_MANAGED'):
+    from core.settings_manager import settings as sm
+    if plugin_name == 'toolmaker' and sm.is_managed():
         if settings.get('validation') == 'trust':
             raise HTTPException(status_code=403, detail="Trust mode is disabled in managed mode")
 
