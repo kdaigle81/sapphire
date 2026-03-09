@@ -20,14 +20,36 @@ async function onToolStart(e) {
             return;
         }
 
-        // 2. Request camera access
+        // 2. Check secure context (browsers block camera on non-secure origins)
+        if (!window.isSecureContext) {
+            const msg = `[Webcam] Camera blocked — not a secure context. ` +
+                `Use https:// or access via localhost instead of ${location.hostname}`;
+            console.error(msg);
+            await fetchWithTimeout('/api/plugin/webcam/capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nonce: pending.nonce, error: msg })
+            });
+            return;
+        }
+
+        // 3. Request camera access
         let stream;
         try {
             stream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
             });
         } catch (err) {
-            console.error('[Webcam] Camera access denied:', err.message);
+            const msg = `[Webcam] Camera access denied: ${err.message}. ` +
+                (err.name === 'NotAllowedError'
+                    ? 'Grant camera permission in browser settings.'
+                    : 'Check that a camera is connected.');
+            console.error(msg);
+            await fetchWithTimeout('/api/plugin/webcam/capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nonce: pending.nonce, error: msg })
+            });
             return;
         }
 

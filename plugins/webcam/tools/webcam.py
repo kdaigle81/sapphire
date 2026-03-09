@@ -77,6 +77,10 @@ def _capture():
     if not image:
         return "Webcam capture timed out — the browser didn't respond. The user may need to grant camera permission or have the web UI open.", False
 
+    # Browser reported an error (insecure context, permission denied, etc.)
+    if "error" in image:
+        return image["error"], False
+
     return {
         "text": "Webcam snapshot captured successfully",
         "images": [image]

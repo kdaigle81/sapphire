@@ -37,11 +37,23 @@ def get_pending(**_):
 
 
 def handle_capture(body, **_):
-    """POST /api/plugin/webcam/capture — deliver a captured image."""
+    """POST /api/plugin/webcam/capture — deliver a captured image or error."""
     if not body:
         return {"error": "Empty request body"}
 
     nonce = body.get("nonce")
+
+    # Browser can report errors (insecure context, permission denied, etc.)
+    browser_error = body.get("error")
+    if nonce and browser_error:
+        state = _get_shared_state()
+        with state.lock:
+            event = state.pending["event"]
+            if event and not event.is_set() and nonce == state.pending["nonce"]:
+                state.pending["image"] = {"error": browser_error}
+                event.set()
+        return {"status": "ok", "accepted": "error"}
+
     data = body.get("data")
     media_type = body.get("media_type", "image/jpeg")
 
