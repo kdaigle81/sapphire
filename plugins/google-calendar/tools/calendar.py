@@ -324,6 +324,12 @@ def execute(function_name, arguments, config, plugin_settings=None):
         tz = _get_local_tz()
 
         try:
+            from zoneinfo import ZoneInfo
+            user_tz = ZoneInfo(tz)
+        except Exception:
+            user_tz = None
+
+        try:
             start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         except ValueError:
             return f"Invalid start_date format: '{start_str}'. Use YYYY-MM-DD.", False
@@ -332,6 +338,14 @@ def execute(function_name, arguments, config, plugin_settings=None):
             end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else start + timedelta(days=7)
         except ValueError:
             return f"Invalid end_date format: '{end_str}'. Use YYYY-MM-DD.", False
+
+        # Attach timezone so isoformat() includes the UTC offset
+        if user_tz:
+            start = start.replace(tzinfo=user_tz)
+            end = end.replace(tzinfo=user_tz)
+        else:
+            start = start.astimezone()
+            end = end.astimezone()
 
         # End should be end of day
         end = end.replace(hour=23, minute=59, second=59)
