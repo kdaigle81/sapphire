@@ -1,182 +1,130 @@
 // continuity-api.js - API wrapper for continuity endpoints
+import { fetchWithTimeout } from './fetch.js';
 
 const API_BASE = '/api/continuity';
 
 export async function fetchTasks() {
-  const res = await fetch(`${API_BASE}/tasks`);
-  if (!res.ok) throw new Error('Failed to fetch tasks');
-  const data = await res.json();
+  const data = await fetchWithTimeout(`${API_BASE}/tasks`);
   return data.tasks || [];
 }
 
 export async function createTask(taskData) {
-  const res = await fetch(`${API_BASE}/tasks`, {
+  return fetchWithTimeout(`${API_BASE}/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(taskData)
   });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to create task');
-  }
-  return res.json();
 }
 
 export async function getTask(taskId) {
-  const res = await fetch(`${API_BASE}/tasks/${taskId}`);
-  if (!res.ok) throw new Error('Task not found');
-  return res.json();
+  return fetchWithTimeout(`${API_BASE}/tasks/${taskId}`);
 }
 
 export async function updateTask(taskId, taskData) {
-  const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
+  return fetchWithTimeout(`${API_BASE}/tasks/${taskId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(taskData)
   });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to update task');
-  }
-  return res.json();
 }
 
 export async function deleteTask(taskId) {
-  const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
-    method: 'DELETE'
-  });
-  if (!res.ok) throw new Error('Failed to delete task');
-  return res.json();
+  return fetchWithTimeout(`${API_BASE}/tasks/${taskId}`, { method: 'DELETE' });
 }
 
 export async function runTask(taskId) {
-  const res = await fetch(`${API_BASE}/tasks/${taskId}/run`, {
-    method: 'POST'
-  });
-  if (!res.ok) throw new Error('Failed to run task');
-  return res.json();
+  return fetchWithTimeout(`${API_BASE}/tasks/${taskId}/run`, { method: 'POST' });
 }
 
 export async function fetchStatus() {
-  const res = await fetch(`${API_BASE}/status`);
-  if (!res.ok) throw new Error('Failed to fetch status');
-  return res.json();
+  return fetchWithTimeout(`${API_BASE}/status`);
 }
 
 export async function fetchActivity(limit = 50) {
-  const res = await fetch(`${API_BASE}/activity?limit=${limit}`);
-  if (!res.ok) throw new Error('Failed to fetch activity');
-  const data = await res.json();
+  const data = await fetchWithTimeout(`${API_BASE}/activity?limit=${limit}`);
   return data.activity || [];
 }
 
 export async function fetchTimeline(hours = 24) {
-  const res = await fetch(`${API_BASE}/timeline?hours=${hours}`);
-  if (!res.ok) throw new Error('Failed to fetch timeline');
-  const data = await res.json();
+  const data = await fetchWithTimeout(`${API_BASE}/timeline?hours=${hours}`);
   return data.timeline || [];
 }
 
 // Fetch prompts for dropdown (live)
 export async function fetchPrompts() {
-  const res = await fetch('/api/prompts');
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.prompts || [];
+  try { const data = await fetchWithTimeout('/api/prompts'); return data.prompts || []; }
+  catch { return []; }
 }
 
 // Fetch toolsets for dropdown (live)
 export async function fetchToolsets() {
-  const res = await fetch('/api/toolsets');
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.toolsets || [];
+  try { const data = await fetchWithTimeout('/api/toolsets'); return data.toolsets || []; }
+  catch { return []; }
 }
 
 // Fetch LLM providers with metadata
 export async function fetchLLMProviders() {
-  const res = await fetch('/api/llm/providers');
-  if (!res.ok) return { providers: [], metadata: {} };
-  const data = await res.json();
-  return {
-    providers: data.providers || [],
-    metadata: data.metadata || {}
-  };
+  try {
+    const data = await fetchWithTimeout('/api/llm/providers');
+    return { providers: data.providers || [], metadata: data.metadata || {} };
+  } catch { return { providers: [], metadata: {} }; }
 }
 
 // Fetch memory scopes
 export async function fetchMemoryScopes() {
-  const res = await fetch('/api/memory/scopes');
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.scopes || [];
+  try { const data = await fetchWithTimeout('/api/memory/scopes'); return data.scopes || []; }
+  catch { return []; }
 }
 
 // Fetch knowledge scopes
 export async function fetchKnowledgeScopes() {
-  const res = await fetch('/api/knowledge/scopes');
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.scopes || [];
+  try { const data = await fetchWithTimeout('/api/knowledge/scopes'); return data.scopes || []; }
+  catch { return []; }
 }
 
 // Fetch people scopes
 export async function fetchPeopleScopes() {
-  const res = await fetch('/api/knowledge/people/scopes');
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.scopes || [];
+  try { const data = await fetchWithTimeout('/api/knowledge/people/scopes'); return data.scopes || []; }
+  catch { return []; }
 }
 
 // Fetch goal scopes
 export async function fetchGoalScopes() {
-  const res = await fetch('/api/goals/scopes');
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.scopes || [];
+  try { const data = await fetchWithTimeout('/api/goals/scopes'); return data.scopes || []; }
+  catch { return []; }
 }
 
 // Fetch email accounts
 export async function fetchEmailAccounts() {
-  const res = await fetch('/api/email/accounts');
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.accounts || [];
+  try { const data = await fetchWithTimeout('/api/email/accounts'); return data.accounts || []; }
+  catch { return []; }
 }
 
 // Fetch tasks filtered by heartbeat
 export async function fetchHeartbeats() {
-  const res = await fetch(`${API_BASE}/tasks?heartbeat=true`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.tasks || [];
+  try { const data = await fetchWithTimeout(`${API_BASE}/tasks?heartbeat=true`); return data.tasks || []; }
+  catch { return []; }
 }
 
 export async function fetchNonHeartbeatTasks() {
-  const res = await fetch(`${API_BASE}/tasks?heartbeat=false`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.tasks || [];
+  try { const data = await fetchWithTimeout(`${API_BASE}/tasks?heartbeat=false`); return data.tasks || []; }
+  catch { return []; }
 }
 
 // Fetch personas (list with summary)
 export async function fetchPersonas() {
-  const res = await fetch('/api/personas');
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.personas || [];
+  try { const data = await fetchWithTimeout('/api/personas'); return data.personas || []; }
+  catch { return []; }
 }
 
 // Fetch single persona with full settings
 export async function fetchPersona(name) {
-  const res = await fetch(`/api/personas/${encodeURIComponent(name)}`);
-  if (!res.ok) return null;
-  return res.json();
+  try { return await fetchWithTimeout(`/api/personas/${encodeURIComponent(name)}`); }
+  catch { return null; }
 }
 
 // Fetch merged timeline
 export async function fetchMergedTimeline(hoursBack = 12, hoursAhead = 12) {
-  const res = await fetch(`${API_BASE}/merged-timeline?hours_back=${hoursBack}&hours_ahead=${hoursAhead}`);
-  if (!res.ok) return { now: null, past: [], future: [] };
-  return res.json();
+  try { return await fetchWithTimeout(`${API_BASE}/merged-timeline?hours_back=${hoursBack}&hours_ahead=${hoursAhead}`); }
+  catch { return { now: null, past: [], future: [] }; }
 }
