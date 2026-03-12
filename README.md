@@ -6,6 +6,7 @@ Hear her voice as she dims your lights before bed. Use your voice to talk back. 
 [![YouTube](https://img.shields.io/badge/YouTube-Subscribe-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/@SapphireBlueAi)
 [![Website](https://img.shields.io/badge/Website-sapphireblue.dev-0ea5e9?logo=googlechrome&logoColor=white)](https://sapphireblue.dev/)
 [![GitHub Stars](https://img.shields.io/github/stars/ddxfish/sapphire?style=flat&logo=github&label=Stars)](https://github.com/ddxfish/sapphire)
+[![Patreon](https://img.shields.io/badge/Patreon-Support-F96854?logo=patreon&logoColor=white)](https://www.patreon.com/c/sapphireai)
 
 > **⚠️ Warning — Sapphire has real power over real systems.**
 >
@@ -107,6 +108,28 @@ python main.py
 Web UI: https://localhost:8073
 
 The setup wizard walks you through LLM configuration on first run.
+
+## Docker Quick Start (Alternative)
+
+No conda, no pip, no dependencies. Web UI only — no wake word or local microphone.
+
+**Linux / Mac:**
+```bash
+mkdir ~/sapphire && cd ~/sapphire
+curl -fsSL https://raw.githubusercontent.com/ddxfish/sapphire/main/docker-compose.yml -o docker-compose.yml
+docker compose up -d
+```
+
+**Windows (PowerShell):**
+```powershell
+mkdir $HOME\sapphire; cd $HOME\sapphire
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ddxfish/sapphire/main/docker-compose.yml" -OutFile "docker-compose.yml"
+docker compose up -d
+```
+
+Web UI: https://localhost:8073 — TTS and STT work through the browser, no mic hardware needed.
+
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac) or [Docker Engine](https://docs.docker.com/engine/install/) (Linux). GPU support and full docs: [DOCKER.md](docs/DOCKER.md)
 
 ## Update
 ```bash

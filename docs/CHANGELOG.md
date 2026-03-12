@@ -1,3 +1,8 @@
+# 2.2.8 - Docker Support
+- Added Docker image to main build in github
+- One for CPU, one for Nvidia GPU
+- Faster whisper to 4 cores
+- Kokoro retry backoff for slower docker hosts
 # 2.2.7 - Plugin store
 - Sapphire can browse plugin store
 - Can install plugins
