@@ -1,16 +1,23 @@
 # plugins/discord/tools/discord_tools.py — Discord tools for the LLM
 #
 # Account is read from scope_discord ContextVar (set via sidebar dropdown).
-# Output is human-readable text — reduces LLM cognitive overhead.
+# Channel can be specified by name (e.g. "general-bot-chat") or ID.
+# In daemon context, channel defaults to the one that triggered the event.
 
 import asyncio
 import logging
+from contextvars import ContextVar
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 ENABLED = True
 EMOJI = "🎮"
+
+# Set by executor when processing a daemon event — auto-reply target
+_reply_channel_id = ContextVar('discord_reply_channel_id', default=None)
+# Set to True when discord_send_message runs — prevents double-post from auto_reply
+_message_sent = ContextVar('discord_message_sent', default=False)
 
 TOOLS = [
     {
@@ -29,9 +36,9 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "channel_id": {
+                    "channel": {
                         "type": "string",
-                        "description": "The channel ID to read from"
+                        "description": "Channel name (e.g. 'general-bot-chat') or channel ID. Omit to use the channel that triggered this message."
                     },
                     "count": {
                         "type": "integer",
@@ -39,7 +46,7 @@ TOOLS = [
                         "default": 20
                     }
                 },
-                "required": ["channel_id"]
+                "required": []
             }
         }
     },
@@ -47,20 +54,20 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "discord_send_message",
-            "description": "Send a message to a Discord channel.",
+            "description": "Send a message to a Discord channel. If no channel specified, replies to the channel that triggered this conversation.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "channel_id": {
+                    "channel": {
                         "type": "string",
-                        "description": "The channel ID to send to"
+                        "description": "Channel name (e.g. 'general-bot-chat') or channel ID. Omit to reply to the triggering channel."
                     },
                     "text": {
                         "type": "string",
                         "description": "Message text to send (max 2000 chars)"
                     }
                 },
-                "required": ["channel_id", "text"]
+                "required": ["text"]
             }
         }
     }
@@ -111,6 +118,41 @@ def _time_ago(dt):
     return f"{days}d ago"
 
 
+def _resolve_channel(client, loop, channel_ref):
+    """Resolve a channel name or ID to a discord channel object.
+
+    Accepts: channel name (e.g. 'general-bot-chat'), channel ID string, or None.
+    If None, falls back to _reply_channel_id ContextVar (daemon context).
+    """
+    # No ref — try daemon reply channel
+    if not channel_ref:
+        fallback_id = _reply_channel_id.get()
+        if not fallback_id:
+            return None, "No channel specified and no triggering channel available."
+        channel_ref = str(fallback_id)
+
+    channel_ref = channel_ref.strip().lstrip('#')
+
+    # If it's a pure number, treat as ID
+    if channel_ref.isdigit():
+        async def _by_id():
+            ch = client.get_channel(int(channel_ref))
+            if not ch:
+                ch = await client.fetch_channel(int(channel_ref))
+            return ch
+        future = asyncio.run_coroutine_threadsafe(_by_id(), loop)
+        return future.result(timeout=10), None
+
+    # Otherwise resolve by name (case-insensitive)
+    target = channel_ref.lower()
+    for guild in client.guilds:
+        for ch in guild.text_channels:
+            if ch.name.lower() == target:
+                return ch, None
+
+    return None, f"Channel '{channel_ref}' not found. Use discord_get_servers to see available channels."
+
+
 def _get_servers(client, loop):
     """List servers and their text channels."""
     async def _fetch():
@@ -134,25 +176,24 @@ def _get_servers(client, loop):
         return _header() + "Not in any servers.", True
 
     lines = [_header()]
-    ch_num = 1
     for s in servers:
         lines.append(f"{s['name']} ({s['members']} members)")
         for ch in s["channels"]:
-            lines.append(f"  [{ch_num}] #{ch['name']}  {ch['id']}")
-            ch_num += 1
+            lines.append(f"  #{ch['name']}")
         lines.append("")
 
     return "\n".join(lines), True
 
 
-def _read_messages(client, loop, channel_id, count=20):
+def _read_messages(client, loop, channel_ref=None, count=20):
     """Read recent messages from a channel."""
     count = min(max(count, 1), 50)
 
+    channel, err = _resolve_channel(client, loop, channel_ref)
+    if err:
+        return err, False
+
     async def _fetch():
-        channel = client.get_channel(int(channel_id))
-        if not channel:
-            channel = await client.fetch_channel(int(channel_id))
         messages = []
         async for msg in channel.history(limit=count):
             messages.append({
@@ -161,15 +202,15 @@ def _read_messages(client, loop, channel_id, count=20):
                 "time": msg.created_at,
                 "attachments": len(msg.attachments),
             })
-        return channel.name, list(reversed(messages))  # oldest first
+        return list(reversed(messages))  # oldest first
 
     future = asyncio.run_coroutine_threadsafe(_fetch(), loop)
-    channel_name, messages = future.result(timeout=15)
+    messages = future.result(timeout=15)
 
     if not messages:
-        return _header() + f"#{channel_name}: No messages.", True
+        return _header() + f"#{channel.name}: No messages.", True
 
-    lines = [_header() + f"#{channel_name} — {len(messages)} messages:\n"]
+    lines = [_header() + f"#{channel.name} — {len(messages)} messages:\n"]
     for m in messages:
         ago = _time_ago(m["time"])
         attach = f" [{m['attachments']} file(s)]" if m["attachments"] else ""
@@ -178,7 +219,7 @@ def _read_messages(client, loop, channel_id, count=20):
     return "\n".join(lines), True
 
 
-def _send_message(client, loop, channel_id, text):
+def _send_message(client, loop, channel_ref=None, text=""):
     """Send a message to a channel."""
     if not text or not text.strip():
         return "Message text is required.", False
@@ -186,15 +227,17 @@ def _send_message(client, loop, channel_id, text):
     if len(text) > 2000:
         return "Message exceeds Discord's 2000 character limit.", False
 
+    channel, err = _resolve_channel(client, loop, channel_ref)
+    if err:
+        return err, False
+
     async def _send():
-        channel = client.get_channel(int(channel_id))
-        if not channel:
-            channel = await client.fetch_channel(int(channel_id))
         await channel.send(text)
         return channel.name
 
     future = asyncio.run_coroutine_threadsafe(_send(), loop)
     channel_name = future.result(timeout=10)
+    _message_sent.set(True)
 
     return f"Message sent to #{channel_name}.", True
 
@@ -212,13 +255,13 @@ def execute(function_name, arguments, config=None):
         elif function_name == "discord_read_messages":
             return _read_messages(
                 client, loop,
-                arguments.get("channel_id", ""),
+                arguments.get("channel", arguments.get("channel_id", "")),
                 arguments.get("count", 20)
             )
         elif function_name == "discord_send_message":
             return _send_message(
                 client, loop,
-                arguments.get("channel_id", ""),
+                arguments.get("channel", arguments.get("channel_id", "")),
                 arguments.get("text", "")
             )
         else:

@@ -45,11 +45,12 @@ class ContinuityExecutor:
         guild = obj.get("guild_name", "")
 
         parts = []
-        # Add channel/server context if available (Discord, etc.)
+        # Label channel to match tool param name exactly — AI can copy-paste
         if channel and guild:
-            parts.append(f"[#{channel} in {guild}]")
+            parts.append(f"channel: {channel}")
+            parts.append(f"server: {guild}")
         elif channel:
-            parts.append(f"[#{channel}]")
+            parts.append(f"channel: {channel}")
 
         # Include recent chat history if available
         history = obj.get("recent_history", [])
@@ -104,6 +105,9 @@ class ContinuityExecutor:
                     source = trigger.get("source", "") or trigger.get("event_source", "")
                     if "discord" in source and not task.get("discord_scope"):
                         task["discord_scope"] = obj["account"]
+                        # Stash channel_id for auto-reply targeting
+                        if obj.get("channel_id"):
+                            task["_discord_reply_channel_id"] = obj["channel_id"]
                     elif "email" in source and not task.get("email_scope"):
                         task["email_scope"] = obj["account"]
             except (json.JSONDecodeError, TypeError):
@@ -170,6 +174,15 @@ class ContinuityExecutor:
             )
 
             self._apply_voice(task)
+
+            # Set Discord reply channel for auto-reply targeting
+            reply_ch = task.get("_discord_reply_channel_id")
+            if reply_ch:
+                try:
+                    from plugins.discord.tools.discord_tools import _reply_channel_id
+                    _reply_channel_id.set(reply_ch)
+                except ImportError:
+                    pass
 
             tts_enabled = task.get("tts_enabled", True)
             browser_tts = task.get("browser_tts", False)
@@ -251,6 +264,15 @@ class ContinuityExecutor:
             )
 
             self._apply_voice(task)
+
+            # Set Discord reply channel for auto-reply targeting
+            reply_ch = task.get("_discord_reply_channel_id")
+            if reply_ch:
+                try:
+                    from plugins.discord.tools.discord_tools import _reply_channel_id
+                    _reply_channel_id.set(reply_ch)
+                except ImportError:
+                    pass
 
             tts_enabled = task.get("tts_enabled", True)
             browser_tts = task.get("browser_tts", False)

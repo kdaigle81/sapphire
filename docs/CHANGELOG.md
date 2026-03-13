@@ -1,3 +1,5 @@
+# 2.3.2 - Plugin UI Refactor
+- 
 # 2.3.1 - Discord Support 
 - Improved 'tool not available' when changing plugins
 - Discord tools - list chan, read, send

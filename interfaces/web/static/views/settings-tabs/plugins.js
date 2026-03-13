@@ -117,6 +117,7 @@ function _sortPlugins(plugins) {
 function _filterPlugins(plugins, filter) {
     if (filter === 'all') return plugins;
     if (filter === 'enabled') return plugins.filter(p => p.enabled);
+    if (filter === 'disabled') return plugins.filter(p => !p.enabled);
     if (filter === 'official') return plugins.filter(p => p.verify_tier === 'official' || (!p.verify_tier && p.verified === true));
     if (filter === 'user') return plugins.filter(p => p.band === 'user');
     return plugins;
@@ -126,6 +127,7 @@ function _counts(plugins) {
     return {
         all: plugins.length,
         enabled: plugins.filter(p => p.enabled).length,
+        disabled: plugins.filter(p => !p.enabled).length,
         official: plugins.filter(p => p.verify_tier === 'official' || (!p.verify_tier && p.verified === true)).length,
         user: plugins.filter(p => p.band === 'user').length,
     };
@@ -159,11 +161,8 @@ function _renderCard(p, locked) {
 
     const actions = [];
     if (isUser) {
-        actions.push(`<button class="btn btn-sm plugin-update-btn" data-plugin="${_esc(p.name)}">Check Update</button>`);
+        actions.push(`<button class="btn btn-sm plugin-update-btn" data-plugin="${_esc(p.name)}">Update</button>`);
         actions.push(`<button class="btn btn-sm btn-danger plugin-uninstall-btn" data-plugin="${_esc(p.name)}">Uninstall</button>`);
-    }
-    if (p.url) {
-        actions.push(`<a href="${_esc(p.url)}" target="_blank" rel="noopener" class="btn btn-sm pm-view-btn">View</a>`);
     }
 
     return `
@@ -185,6 +184,7 @@ function _renderCard(p, locked) {
                     <div class="pm-card-meta">
                         ${_badgeHTML(p, locked)}
                         ${meta.length ? `<span class="pm-version">${_esc(meta.join(' \u00b7 '))}</span>` : ''}
+                        ${p.url ? `<a href="${_esc(p.url)}" target="_blank" rel="noopener" class="pm-web-link">web</a>` : ''}
                     </div>
                     ${actions.length ? `<div class="pm-card-actions">${actions.join('')}</div>` : ''}
                 </div>
@@ -226,6 +226,7 @@ export default {
                 <div class="pm-filters">
                     <button class="pm-filter${activeFilter === 'all' ? ' active' : ''}" data-filter="all">All <span class="pm-filter-count">${counts.all}</span></button>
                     <button class="pm-filter${activeFilter === 'enabled' ? ' active' : ''}" data-filter="enabled">Enabled <span class="pm-filter-count">${counts.enabled}</span></button>
+                    <button class="pm-filter${activeFilter === 'disabled' ? ' active' : ''}" data-filter="disabled">Disabled <span class="pm-filter-count">${counts.disabled}</span></button>
                     <button class="pm-filter${activeFilter === 'official' ? ' active' : ''}" data-filter="official">Official <span class="pm-filter-count">${counts.official}</span></button>
                     <button class="pm-filter${activeFilter === 'user' ? ' active' : ''}" data-filter="user">User <span class="pm-filter-count">${counts.user}</span></button>
                 </div>

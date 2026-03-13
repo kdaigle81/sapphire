@@ -223,11 +223,17 @@ async def send_message(account_name: str, channel_id: int, text: str):
 
 
 def _reply_handler(task, event_data: dict, response_text: str):
-    """Route LLM response back to the Discord channel that triggered the daemon."""
-    import re
+    """Route LLM response back to the Discord channel that triggered the daemon.
 
-    trigger_config = task.get("trigger_config", {})
-    if not trigger_config.get("auto_reply"):
+    Always fires as a safety net — if the LLM already used discord_send_message
+    (smart models), we skip to prevent double-posting.
+    """
+    import re
+    from plugins.discord.tools.discord_tools import _message_sent
+
+    # Smart model already used the tool — don't double-post
+    if _message_sent.get(False):
+        logger.info("[DISCORD] Reply handler skipped — tool already sent message")
         return
 
     channel_id = event_data.get("channel_id")
