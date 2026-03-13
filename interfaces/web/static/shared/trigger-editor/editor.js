@@ -161,7 +161,7 @@ export async function openTriggerEditor(task, type, callbacks = {}) {
         const data = {
             name,
             type,
-            initial_message: modal.querySelector('#ed-message')?.value?.trim() || 'Hello.',
+            initial_message: modal.querySelector('#ed-message')?.value?.trim() || '',
             heartbeat: type === 'heartbeat',  // backward compat
             emoji: selectedEmoji || t.emoji || '',
             ...triggerConfig,
