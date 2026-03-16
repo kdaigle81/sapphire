@@ -568,24 +568,47 @@ async def duplicate_persona(name: str, request: Request, _=Depends(require_login
 
 @router.post("/api/personas/{name}/avatar")
 async def upload_persona_avatar(name: str, request: Request, file: UploadFile = File(...), _=Depends(require_login)):
-    """Upload avatar image for a persona (max 4MB)."""
+    """Upload avatar image for a persona (max 4MB). Auto-resized to 512x512 webp."""
     from core.personas import persona_manager
     if not persona_manager.exists(name):
         raise HTTPException(status_code=404, detail="Persona not found")
 
-    data = await file.read()
-    if len(data) > 4 * 1024 * 1024:
+    raw = await file.read()
+    if len(raw) > 4 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Avatar too large (max 4MB)")
 
-    # Determine extension from content type
-    content_type = file.content_type or ''
-    ext_map = {'image/webp': '.webp', 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif'}
-    ext = ext_map.get(content_type, '.webp')
-    filename = f"{name}{ext}"
+    # Resize to 512x512 square (center crop) and convert to webp
+    data = _process_avatar(raw)
+    filename = f"{name}.webp"
 
     if not persona_manager.set_avatar(name, filename, data):
         raise HTTPException(status_code=500, detail="Failed to save avatar")
     return {"status": "success", "avatar": filename}
+
+
+def _process_avatar(raw: bytes, size: int = 512) -> bytes:
+    """Resize image to square webp. Center-crops to avoid distortion."""
+    import io
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(raw))
+    img = img.convert("RGBA") if img.mode == "RGBA" else img.convert("RGB")
+
+    # Center crop to square
+    w, h = img.size
+    if w != h:
+        side = min(w, h)
+        left = (w - side) // 2
+        top = (h - side) // 2
+        img = img.crop((left, top, left + side, top + side))
+
+    # Resize to target
+    if img.size[0] != size:
+        img = img.resize((size, size), Image.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="WEBP", quality=85)
+    return buf.getvalue()
 
 
 @router.delete("/api/personas/{name}/avatar")
@@ -808,8 +831,8 @@ async def import_persona(request: Request, _=Depends(require_login)):
                 header, b64data = data["avatar"].split(",", 1)
                 mime = header.split(":")[1].split(";")[0]
                 ext = {'image/webp': '.webp', 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif'}.get(mime, '.webp')
-                avatar_bytes = base64.b64decode(b64data)
-                filename = f"{persona_manager._sanitize_name(name)}{ext}"
+                avatar_bytes = _process_avatar(base64.b64decode(b64data))
+                filename = f"{persona_manager._sanitize_name(name)}.webp"
                 persona_manager.set_avatar(persona_manager._sanitize_name(name), filename, avatar_bytes)
                 logger.info(f"[IMPORT] Saved avatar for '{name}' ({len(avatar_bytes)} bytes)")
             except Exception as e:
