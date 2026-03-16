@@ -111,6 +111,8 @@ def _create_code_worker():
             ]
             if session_id:
                 lines.append(f"- Session ID: `{session_id}` (resumable)")
+            if os.path.isfile(os.path.join(workspace, 'index.html')):
+                lines.append(f"- **[Open App](/workspace/{self.project_name}/index.html)**")
             lines.append(f"\n**Files:**\n{file_listing}")
             lines.append(f"\n**Result:**\n{result_text}")
 
@@ -171,6 +173,7 @@ _CLAUDE_MD_TEMPLATE = """# Project: {project_name}
 - Do not install system-wide packages
 - Test your code before reporting done
 - Keep dependencies minimal
+- For web apps: build as a self-contained `index.html` with inline JS/CSS (no build step, no npm). This file gets served directly to the user's browser
 
 ## Context
 Dispatched by Sapphire AI on behalf of the user.
@@ -468,6 +471,8 @@ def _code_session(arguments):
     ]
     if new_session_id:
         lines.append(f"- Session ID: `{new_session_id}` (resumable)")
+    if os.path.isfile(os.path.join(workspace, 'index.html')):
+        lines.append(f"- **[Open App](/workspace/{project_name}/index.html)**")
     lines.append(f"\n**Files in workspace:**\n{file_listing}")
     lines.append(f"\n**Result:**\n{result_text}")
 
