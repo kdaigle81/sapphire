@@ -1,8 +1,10 @@
 // views/schedule.js - Triggers view (Time tab + Events tab)
 import { fetchNonHeartbeatTasks, fetchHeartbeats, fetchStatus, fetchMergedTimeline,
-         fetchTasksByType, createTask, updateTask, deleteTask, runTask } from '../shared/continuity-api.js';
+         fetchTasksByType, createTask, updateTask, deleteTask, runTask,
+         fetchMemoryScopes, fetchKnowledgeScopes, fetchPeopleScopes, fetchGoalScopes } from '../shared/continuity-api.js';
 import { openTriggerEditor } from '../shared/trigger-editor/editor.js';
 import { describeCron } from '../shared/trigger-editor/trigger-cron.js';
+import { showExportDialog, showImportDialog } from '../shared/import-export.js';
 import * as ui from '../ui.js';
 
 let container = null;
@@ -83,12 +85,14 @@ function renderTabContent() {
                 <div id="sched-tasks">
                     <div class="sched-col-header">
                         <h3>Tasks</h3>
+                        <button class="btn-sm" id="sched-import-task" title="Import task">\u2B07</button>
                         <button class="btn-sm btn-primary" id="sched-new-task">+ Task</button>
                     </div>
                 </div>
                 <div class="sched-mission" id="sched-mission">
                     <div class="sched-col-header">
                         <h3>Mission Control</h3>
+                        <button class="btn-sm" id="sched-import-heartbeat" title="Import heartbeat">\u2B07</button>
                         <button class="btn-sm btn-primary" id="sched-new-heartbeat">+ Heartbeat</button>
                     </div>
                 </div>
@@ -100,12 +104,14 @@ function renderTabContent() {
                 <div id="sched-daemons">
                     <div class="sched-col-header">
                         <h3>Daemons</h3>
+                        <button class="btn-sm" id="sched-import-daemon" title="Import daemon">\u2B07</button>
                         <button class="btn-sm btn-primary" id="sched-new-daemon">+ Daemon</button>
                     </div>
                 </div>
                 <div class="sched-mission" id="sched-webhooks">
                     <div class="sched-col-header">
                         <h3>Webhooks</h3>
+                        <button class="btn-sm" id="sched-import-webhook" title="Import webhook">\u2B07</button>
                         <button class="btn-sm btn-primary" id="sched-new-webhook">+ Webhook</button>
                     </div>
                 </div>
@@ -194,6 +200,7 @@ function renderTaskList() {
         const actions = isPlugin
             ? `<button class="btn-icon" data-action="run" data-id="${t.id}" title="Run now">\u25B6</button>`
             : `<button class="btn-icon" data-action="run" data-id="${t.id}" title="Run now">\u25B6</button>
+               <button class="btn-icon" data-action="export" data-id="${t.id}" title="Export">\u21E9</button>
                <button class="btn-icon" data-action="edit" data-id="${t.id}" title="Edit">\u270F\uFE0F</button>
                <button class="btn-icon danger" data-action="delete" data-id="${t.id}" title="Delete">\u2715</button>`;
 
@@ -274,6 +281,7 @@ function renderHeartbeatCard(hb) {
             ${responseHtml}
             <div class="hb-actions">
                 <button class="btn-icon" data-action="run" data-id="${hb.id}" title="Run now">\u25B6</button>
+                <button class="btn-icon" data-action="export" data-id="${hb.id}" title="Export">\u21E9</button>
                 <button class="btn-icon" data-action="edit" data-id="${hb.id}" title="Edit">\u270F\uFE0F</button>
                 <button class="btn-icon danger" data-action="delete" data-id="${hb.id}" title="Delete">\u2715</button>
             </div>
@@ -329,6 +337,7 @@ function renderDaemonList() {
                     <div class="sched-task-meta">${meta}</div>
                 </div>
                 <div class="sched-task-actions">
+                    <button class="btn-icon" data-action="export" data-id="${d.id}" title="Export">\u21E9</button>
                     <button class="btn-icon" data-action="edit" data-id="${d.id}" title="Edit">\u270F\uFE0F</button>
                     <button class="btn-icon danger" data-action="delete" data-id="${d.id}" title="Delete">\u2715</button>
                 </div>
@@ -364,6 +373,7 @@ function renderWebhookList() {
                     <div class="sched-task-meta">${meta}</div>
                 </div>
                 <div class="sched-task-actions">
+                    <button class="btn-icon" data-action="export" data-id="${w.id}" title="Export">\u21E9</button>
                     <button class="btn-icon" data-action="edit" data-id="${w.id}" title="Edit">\u270F\uFE0F</button>
                     <button class="btn-icon danger" data-action="delete" data-id="${w.id}" title="Delete">\u2715</button>
                 </div>
@@ -503,6 +513,12 @@ function bindTabContent() {
     container.querySelector('#sched-new-daemon')?.addEventListener('click', () => openEditor(null, 'daemon'));
     container.querySelector('#sched-new-webhook')?.addEventListener('click', () => openEditor(null, 'webhook'));
 
+    // Import buttons
+    container.querySelector('#sched-import-task')?.addEventListener('click', () => importTask('task', tasks));
+    container.querySelector('#sched-import-heartbeat')?.addEventListener('click', () => importTask('heartbeat', heartbeats));
+    container.querySelector('#sched-import-daemon')?.addEventListener('click', () => importTask('daemon', daemons));
+    container.querySelector('#sched-import-webhook')?.addEventListener('click', () => importTask('webhook', webhooks));
+
     // Delegated actions for task/heartbeat cards
     const layout = container.querySelector('.sched-layout');
     if (!layout) return;
@@ -513,7 +529,10 @@ function bindTabContent() {
         const { action, id } = btn.dataset;
         const allTasks = [...tasks, ...heartbeats, ...daemons, ...webhooks];
 
-        if (action === 'edit') {
+        if (action === 'export') {
+            const task = allTasks.find(t => t.id === id);
+            if (task) exportTask(task);
+        } else if (action === 'edit') {
             const task = allTasks.find(t => t.id === id);
             if (task) {
                 const type = task.type || (task.heartbeat ? 'heartbeat' : 'task');
@@ -583,6 +602,89 @@ function openEditor(task, type) {
                 await loadData();
                 updateContent();
             } catch { ui.showToast('Delete failed', 'error'); }
+        },
+    });
+}
+
+// ── Import / Export ──
+
+const EXPORT_STRIP_KEYS = ['id', 'last_run', 'last_response', 'created', 'running', 'source', 'handler', 'plugin_dir'];
+const SCOPE_KEYS = ['memory_scope', 'knowledge_scope', 'people_scope', 'goal_scope'];
+
+function buildTaskExport(task) {
+    const clean = { ...task };
+    EXPORT_STRIP_KEYS.forEach(k => delete clean[k]);
+    clean.enabled = false; // always import disabled
+    return {
+        sapphire_export: true,
+        type: clean.type || 'task',
+        version: 1,
+        name: clean.name,
+        task: clean,
+    };
+}
+
+function exportTask(task) {
+    const type = task.type || 'task';
+    showExportDialog({
+        type: type.charAt(0).toUpperCase() + type.slice(1),
+        name: task.name,
+        filename: `${task.name.replace(/\s+/g, '_')}.${type}.json`,
+        data: buildTaskExport(task),
+    });
+}
+
+async function importTask(type, allTasks) {
+    // Fetch available scopes for validation
+    const [memScopes, knowScopes, pplScopes, goalScopes] = await Promise.all([
+        fetchMemoryScopes(), fetchKnowledgeScopes(), fetchPeopleScopes(), fetchGoalScopes(),
+    ]);
+    const scopeSets = {
+        memory_scope: new Set(['default', 'none', ...memScopes.map(s => s.name || s)]),
+        knowledge_scope: new Set(['default', 'none', ...knowScopes.map(s => s.name || s)]),
+        people_scope: new Set(['default', 'none', ...pplScopes.map(s => s.name || s)]),
+        goal_scope: new Set(['default', 'none', ...goalScopes.map(s => s.name || s)]),
+    };
+
+    const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+    showImportDialog({
+        type: typeLabel,
+        existingNames: allTasks.map(t => t.name),
+        validate: (d) => {
+            if (d.sapphire_export && d.task) return null;
+            if (d.name && (d.schedule || d.trigger_config || d.initial_message)) return null;
+            return `Invalid ${type} format`;
+        },
+        getName: (d) => (d.task?.name || d.name || 'imported'),
+        onImport: async (data, { name }) => {
+            const task = data.task || data;
+            task.name = name;
+            task.type = task.type || type;
+            task.enabled = false;
+            delete task.id;
+            delete task.last_run;
+            delete task.last_response;
+            delete task.created;
+
+            // Validate scopes — reset to default if they don't exist on this instance
+            const skippedScopes = [];
+            for (const key of SCOPE_KEYS) {
+                const val = task[key];
+                if (val && scopeSets[key] && !scopeSets[key].has(val)) {
+                    skippedScopes.push(`${key}: "${val}"`);
+                    task[key] = 'default';
+                }
+            }
+
+            await createTask(task);
+
+            if (skippedScopes.length) {
+                ui.showToast(`Imported (${skippedScopes.length} scopes reset to default: ${skippedScopes.join(', ')})`, 'warning');
+            }
+        },
+        onDone: async () => {
+            await loadData();
+            activeTab === 'time' ? updateContent() : renderTabContent();
         },
     });
 }
