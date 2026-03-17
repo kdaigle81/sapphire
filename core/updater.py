@@ -75,6 +75,21 @@ class Updater:
             return self.status()
 
         self.checking = True
+
+        def _parse_version(v):
+            """Parse version string to tuple, stripping non-numeric suffixes."""
+            parts = []
+            for x in v.split('.'):
+                # Strip suffixes like -rc1, .dev, -beta
+                num = ''
+                for ch in x:
+                    if ch.isdigit():
+                        num += ch
+                    else:
+                        break
+                parts.append(int(num) if num else 0)
+            return tuple(parts)
+
         try:
             # Always check official repo — branch-aware
             url = f'{GITHUB_RAW_URL}/{self.branch}/VERSION'
@@ -82,8 +97,8 @@ class Updater:
             if resp.status_code == 200:
                 self.latest_version = resp.text.strip()
                 self.update_available = (
-                    tuple(int(x) for x in self.latest_version.split('.')) >
-                    tuple(int(x) for x in self.current_version.split('.'))
+                    _parse_version(self.latest_version) >
+                    _parse_version(self.current_version)
                 )
                 self.last_check = now
                 if self.update_available:
@@ -94,8 +109,8 @@ class Updater:
                 if resp.status_code == 200:
                     self.latest_version = resp.text.strip()
                     self.update_available = (
-                        tuple(int(x) for x in self.latest_version.split('.')) >
-                        tuple(int(x) for x in self.current_version.split('.'))
+                        _parse_version(self.latest_version) >
+                        _parse_version(self.current_version)
                     )
                     self.last_check = now
             else:

@@ -4,6 +4,7 @@ Continuity Executor - Runs scheduled tasks with proper context isolation.
 Switches chat context, applies settings, runs LLM, restores original state.
 """
 
+import copy
 import json
 import logging
 from datetime import datetime
@@ -89,7 +90,7 @@ class ContinuityExecutor:
 
         # For event-triggered tasks, build message from instructions + event data
         if event_data is not None:
-            task = dict(task)  # don't mutate original
+            task = copy.deepcopy(task)  # don't mutate original (nested dicts like trigger_config)
             event_display = self._format_event_data(event_data)
             instructions = task.get("initial_message", "").strip()
             if instructions:

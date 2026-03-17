@@ -352,7 +352,7 @@ function _bindMemoryIO(el) {
             const btn = el.querySelector('#mind-find-dups');
             btn.textContent = 'Scanning...';
             btn.disabled = true;
-            const resp = await fetch(`/api/memory/duplicates?scope=${encodeURIComponent(currentScope)}&threshold=0.85`);
+            const resp = await fetch(`/api/memory/duplicates?scope=${encodeURIComponent(currentScope)}`);
             btn.textContent = 'Find Duplicates';
             btn.disabled = false;
             if (!resp.ok) throw new Error('Scan failed');

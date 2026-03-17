@@ -622,6 +622,31 @@ async def webhook_endpoint(path: str, request: Request, system=Depends(get_syste
     if not task:
         raise HTTPException(status_code=404, detail=f"No webhook configured for {method} /{path}")
 
+    # Verify secret if task has one configured
+    trigger_config = task.get("trigger_config", {})
+    webhook_secret = trigger_config.get("secret")
+    if webhook_secret:
+        import hashlib, hmac
+        auth_header = request.headers.get("x-webhook-secret", "")
+        sig_header = request.headers.get("x-hub-signature-256", "")
+        if sig_header:
+            # GitHub-style HMAC: x-hub-signature-256: sha256=<hex>
+            raw_body = await request.body()
+            expected = "sha256=" + hmac.new(webhook_secret.encode(), raw_body, hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(sig_header, expected):
+                raise HTTPException(status_code=403, detail="Invalid webhook signature")
+        elif auth_header:
+            # Simple secret comparison
+            if not hmac.compare_digest(auth_header, webhook_secret):
+                raise HTTPException(status_code=403, detail="Invalid webhook secret")
+        else:
+            raise HTTPException(status_code=403, detail="Webhook secret required but not provided")
+
+    # Payload size limit (1MB)
+    content_length = int(request.headers.get("content-length", 0))
+    if content_length > 1_048_576:
+        raise HTTPException(status_code=413, detail="Payload too large (max 1MB)")
+
     # Build event data from request
     content_type = request.headers.get("content-type", "")
     if "json" in content_type:
@@ -631,10 +656,16 @@ async def webhook_endpoint(path: str, request: Request, system=Depends(get_syste
         except Exception:
             event_data = (await request.body()).decode("utf-8", errors="replace")
     elif method in ("POST", "PUT"):
-        event_data = (await request.body()).decode("utf-8", errors="replace")
+        raw = await request.body()
+        if len(raw) > 1_048_576:
+            raise HTTPException(status_code=413, detail="Payload too large (max 1MB)")
+        event_data = raw.decode("utf-8", errors="replace")
     else:
         # GET — use query params
         event_data = json.dumps(dict(request.query_params))
+
+    client_ip = request.client.host if request.client else "unknown"
+    logger.info(f"[Webhook] {method} /{path} from {client_ip} (task: {task.get('name')})")
 
     result = system.continuity_scheduler.fire_event_task(task["id"], event_data)
 

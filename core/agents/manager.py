@@ -181,12 +181,27 @@ class AgentManager:
                 dismissed_ids.append((a.id, a.name))
                 self._agents.pop(a.id, None)
 
-        for aid, aname in dismissed_ids:
-            publish(Events.AGENT_DISMISSED, {'id': aid, 'name': aname})
+            # Publish events inside lock to prevent new agents from racing
+            for aid, aname in dismissed_ids:
+                publish(Events.AGENT_DISMISSED, {'id': aid, 'name': aname})
 
-        publish(Events.AGENT_BATCH_COMPLETE, {
-            'chat_name': chat_name,
-            'report': report,
-            'agent_count': len(dismissed_ids),
-        })
+            publish(Events.AGENT_BATCH_COMPLETE, {
+                'chat_name': chat_name,
+                'report': report,
+                'agent_count': len(dismissed_ids),
+            })
+
         logger.info(f"Agent batch complete for chat '{chat_name}': {len(dismissed_ids)} agents reported")
+
+    def shutdown(self, timeout=10):
+        """Cancel all running agents and wait for threads to finish. Called on app shutdown."""
+        with self._lock:
+            running = [(aid, a) for aid, a in self._agents.items() if a.status == 'running']
+        for aid, agent in running:
+            logger.info(f"Shutting down agent {agent.name} ({aid})")
+            agent.cancel()
+        for aid, agent in running:
+            if agent._thread and agent._thread.is_alive():
+                agent._thread.join(timeout=timeout)
+        with self._lock:
+            self._agents.clear()

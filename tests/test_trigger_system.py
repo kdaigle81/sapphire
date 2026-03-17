@@ -368,7 +368,7 @@ class TestExecutorEventData:
         """Event data with 'text' field should be formatted as clean message."""
         from core.continuity.executor import ContinuityExecutor
         result = ContinuityExecutor._format_event_data('{"first_name": "Bob", "text": "hello"}')
-        assert result == "Bob: hello"
+        assert result == ">>> Bob: hello"
 
     def test_event_data_raw_passthrough(self):
         """Event data without 'text' field passes through as-is."""

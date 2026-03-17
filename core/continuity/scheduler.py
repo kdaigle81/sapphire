@@ -622,8 +622,8 @@ class ContinuityScheduler:
 
         task_name = task.get("name", "Unnamed")
 
-        # Check filter (daemon tasks only)
-        if task_type == "daemon":
+        # Check filter (daemon and webhook tasks)
+        if task_type in ("daemon", "webhook"):
             trigger_config = task.get("trigger_config", {})
             task_filter = trigger_config.get("filter")
             if task_filter and isinstance(task_filter, dict):
@@ -651,13 +651,19 @@ class ContinuityScheduler:
                                     logger.debug(f"[Continuity] '{task_name}' filter mismatch on '{key}': {ev_val!r} != {val!r}")
                                     return {"success": False, "error": "Event filtered out"}
                 except (json.JSONDecodeError, TypeError):
-                    pass  # Can't parse as JSON, skip filter check
+                    # Can't parse event as JSON — filter can't run, reject for safety
+                    logger.debug(f"[Continuity] '{task_name}' filter active but event data not parseable as JSON, rejecting")
+                    return {"success": False, "error": "Event data not JSON-parseable, filter requires JSON"}
 
         # If already running, queue
         with self._lock:
             if self._task_running.get(task_id, False):
-                self._task_pending[task_id] = self._task_pending.get(task_id, 0) + 1
-                logger.info(f"[Continuity] '{task_name}' busy — queued event")
+                pending = self._task_pending.get(task_id, 0)
+                if pending >= 50:
+                    logger.warning(f"[Continuity] '{task_name}' queue full ({pending} pending), dropping event")
+                    return {"success": False, "error": "Event queue full"}
+                self._task_pending[task_id] = pending + 1
+                logger.info(f"[Continuity] '{task_name}' busy — queued event ({pending + 1} pending)")
                 return {"success": True, "queued": True}
             self._task_running[task_id] = True
 

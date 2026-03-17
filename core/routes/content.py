@@ -591,6 +591,9 @@ def _process_avatar(raw: bytes, size: int = 512) -> bytes:
     import io
     from PIL import Image
 
+    # Guard against decompression bombs
+    Image.MAX_IMAGE_PIXELS = 4096 * 4096
+
     img = Image.open(io.BytesIO(raw))
     img = img.convert("RGBA") if img.mode == "RGBA" else img.convert("RGB")
 
@@ -775,8 +778,17 @@ async def import_persona(request: Request, _=Depends(require_login)):
     prompt_name = None
     if data.get("prompt"):
         prompt_info = data["prompt"]
+        if not isinstance(prompt_info, dict):
+            raise HTTPException(status_code=400, detail="Invalid prompt data format")
         prompt_name = prompt_info.get("name", name)
         prompt_data = prompt_info.get("data", {})
+        if not isinstance(prompt_data, dict):
+            raise HTTPException(status_code=400, detail="Invalid prompt data")
+
+        # Validate required fields based on type
+        prompt_type = prompt_data.get("type", "assembled")
+        if prompt_type == "monolith" and "content" not in prompt_data:
+            raise HTTPException(status_code=400, detail="Monolith prompt requires 'content' field")
 
         existing = get_prompt(prompt_name)
         if existing and not overwrite_prompt:
@@ -785,7 +797,12 @@ async def import_persona(request: Request, _=Depends(require_login)):
         else:
             # Import components if present
             if data.get("components"):
-                for comp_type, defs in data["components"].items():
+                components = data["components"]
+                if not isinstance(components, dict):
+                    raise HTTPException(status_code=400, detail="Invalid components format")
+                for comp_type, defs in components.items():
+                    if not isinstance(defs, dict):
+                        continue
                     for key, value in defs.items():
                         existing_piece = prompt_manager.components.get(comp_type, {}).get(key)
                         if existing_piece and not overwrite_prompt:
@@ -829,8 +846,11 @@ async def import_persona(request: Request, _=Depends(require_login)):
             try:
                 # Parse data URI: data:image/webp;base64,XXXX
                 header, b64data = data["avatar"].split(",", 1)
+                if len(b64data) > 5 * 1024 * 1024:  # 5MB base64 ≈ 3.75MB decoded
+                    raise ValueError("Avatar data too large")
                 mime = header.split(":")[1].split(";")[0]
-                ext = {'image/webp': '.webp', 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif'}.get(mime, '.webp')
+                if mime not in ('image/webp', 'image/png', 'image/jpeg', 'image/gif'):
+                    raise ValueError(f"Unsupported image type: {mime}")
                 avatar_bytes = _process_avatar(base64.b64decode(b64data))
                 filename = f"{persona_manager._sanitize_name(name)}.webp"
                 persona_manager.set_avatar(persona_manager._sanitize_name(name), filename, avatar_bytes)

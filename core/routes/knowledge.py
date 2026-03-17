@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File
 
+import config
 from core.auth import require_login
 from core.api_fastapi import get_system
 
@@ -733,7 +734,8 @@ async def find_duplicate_memories(request: Request, _=Depends(require_login)):
     from functions import memory
 
     scope = request.query_params.get('scope', 'default')
-    threshold = float(request.query_params.get('threshold', '0.85'))
+    default_thresh = getattr(config, 'MEMORY_DEDUP_THRESHOLD', 0.92)
+    threshold = float(request.query_params.get('threshold', str(default_thresh)))
 
     with memory._get_connection() as conn:
         cursor = conn.cursor()
@@ -807,7 +809,7 @@ async def import_memories(request: Request, _=Depends(require_login)):
         text = (entry.get("text") or "").strip()
         if not text:
             continue
-        text_hash = hashlib.sha256(text.lower().encode()).hexdigest()
+        text_hash = hashlib.sha256(text.strip().lower().encode()).hexdigest()
         if text_hash in existing_hashes:
             skipped += 1
             continue

@@ -18,6 +18,8 @@ export function renderEventTrigger(t, opts = {}) {
     if (type === 'webhook') {
         const path = triggerConfig.path || '';
         const method = triggerConfig.method || 'POST';
+        const secret = triggerConfig.secret || '';
+        const eventFilter = triggerConfig.filter ? JSON.stringify(triggerConfig.filter) : '';
         return `
             <div class="sched-section-title" style="margin-top:16px">\uD83D\uDD17 Webhook</div>
             <div class="sched-field">
@@ -34,7 +36,23 @@ export function renderEventTrigger(t, opts = {}) {
                     <option value="GET" ${method === 'GET' ? 'selected' : ''}>GET</option>
                     <option value="PUT" ${method === 'PUT' ? 'selected' : ''}>PUT</option>
                 </select>
-            </div>`;
+            </div>
+            <div class="sched-field">
+                <label>Secret <span class="help-tip" data-tip="Optional. If set, incoming requests must include X-Webhook-Secret header or X-Hub-Signature-256 (GitHub-style HMAC). Leave empty for no auth.">?</span></label>
+                <input type="password" id="ed-webhook-secret" value="${_esc(secret)}" placeholder="Optional secret">
+            </div>
+            <details class="sched-accordion" style="margin-top:8px">
+                <summary class="sched-acc-header">Filter <span class="sched-preview" id="ed-wh-filter-preview">${eventFilter ? 'active' : ''}</span></summary>
+                <div class="sched-acc-body"><div class="sched-acc-inner">
+                    <div class="text-muted" style="font-size:var(--font-xs);margin-bottom:8px">
+                        Only fire when incoming JSON payload matches these fields. Supports _not and _contains suffixes.
+                    </div>
+                    <div class="sched-field">
+                        <label>Filter JSON <span class="help-tip" data-tip="Only webhook payloads matching these fields will trigger this task. Leave empty to accept all payloads.">?</span></label>
+                        <input type="text" id="ed-webhook-filter" value="${_esc(eventFilter)}" placeholder='{"event": "push"}'>
+                    </div>
+                </div></div>
+            </details>`;
     }
 
     // Daemon type — event source from plugins
@@ -71,6 +89,15 @@ export function renderEventTrigger(t, opts = {}) {
 export function wireEventTrigger(modal, opts = {}) {
     const { type, triggerConfig } = opts;
 
+    if (type === 'webhook') {
+        // Update webhook filter preview chip
+        modal.querySelector('#ed-webhook-filter')?.addEventListener('input', () => {
+            const preview = modal.querySelector('#ed-wh-filter-preview');
+            const val = modal.querySelector('#ed-webhook-filter')?.value?.trim();
+            if (preview) preview.textContent = val ? 'active' : '';
+        });
+    }
+
     if (type === 'daemon') {
         // Stash existing trigger_config so task fields can pre-fill on edit
         const tfContainer = modal.querySelector('#ed-task-fields');
@@ -103,10 +130,19 @@ export function readEventTrigger(modal) {
     const webhookPath = modal.querySelector('#ed-webhook-path');
 
     if (webhookPath) {
+        const whFilterStr = modal.querySelector('#ed-webhook-filter')?.value?.trim();
+        let whFilter = null;
+        if (whFilterStr) {
+            try { whFilter = JSON.parse(whFilterStr); }
+            catch { alert('Invalid JSON in webhook filter field'); return null; }
+        }
+        const secret = modal.querySelector('#ed-webhook-secret')?.value?.trim() || undefined;
         return {
             trigger_config: {
                 path: webhookPath.value.trim(),
                 method: modal.querySelector('#ed-webhook-method')?.value || 'POST',
+                ...(secret && { secret }),
+                ...(whFilter && { filter: whFilter }),
             },
             schedule: '0 0 31 2 *', // never fires via cron (Feb 31)
             chance: 100,

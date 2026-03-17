@@ -49,6 +49,23 @@ export default {
                     </button>
                     <span id="embedding-test-result" style="margin-left: 0.75rem; font-size: var(--font-sm);"></span>
                 </div>
+            </div>
+            <div class="settings-grid" style="margin-top: 1.5rem;">
+                <div class="setting-row full-width">
+                    <div class="setting-label">
+                        <label for="setting-MEMORY_DEDUP_THRESHOLD">Memory Dedup Threshold</label>
+                        <div class="setting-description">Similarity threshold for detecting duplicate memories (0.0 - 1.0). Higher = stricter matching, fewer false positives.</div>
+                    </div>
+                    <div class="setting-control" style="display:flex;align-items:center;gap:0.5rem;">
+                        <input type="range" id="setting-MEMORY_DEDUP_THRESHOLD" data-key="MEMORY_DEDUP_THRESHOLD"
+                            min="0.70" max="0.99" step="0.01"
+                            value="${ctx.settings.MEMORY_DEDUP_THRESHOLD ?? 0.92}"
+                            style="flex:1;">
+                        <span id="dedup-threshold-value" style="font-size:var(--font-sm);min-width:2.5rem;text-align:right;">
+                            ${ctx.settings.MEMORY_DEDUP_THRESHOLD ?? 0.92}
+                        </span>
+                    </div>
+                </div>
             </div>`;
         return html;
     },
@@ -59,6 +76,18 @@ export default {
         // Set placeholder on URL field after render
         const urlInput = el.querySelector('[data-key="EMBEDDING_API_URL"]');
         if (urlInput) urlInput.placeholder = 'http://your-server:8080/v1/embeddings';
+
+        // Dedup threshold slider — show live value + store as number
+        const slider = el.querySelector('#setting-MEMORY_DEDUP_THRESHOLD');
+        const valSpan = el.querySelector('#dedup-threshold-value');
+        if (slider && valSpan) {
+            slider.addEventListener('input', () => { valSpan.textContent = slider.value; });
+            slider.addEventListener('change', (e) => {
+                e.stopPropagation();  // prevent generic handler from storing as string
+                ctx.settings.MEMORY_DEDUP_THRESHOLD = parseFloat(slider.value);
+                ctx.markChanged('MEMORY_DEDUP_THRESHOLD', parseFloat(slider.value));
+            });
+        }
 
         // Test button
         const btn = el.querySelector('#embedding-test-btn');

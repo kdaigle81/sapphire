@@ -196,11 +196,11 @@ def _clean_env():
         env.pop(key, None)
     env.pop('VIRTUAL_ENV', None)
     env.pop('UV_VIRTUALENV', None)
-    path_dirs = env.get('PATH', '').split(':')
+    path_dirs = env.get('PATH', '').split(os.pathsep)
     clean_path = [d for d in path_dirs
-                  if '/envs/' not in d and '/conda' not in d.lower()
-                  and '/.venv/' not in d and '/virtualenvs/' not in d]
-    env['PATH'] = ':'.join(clean_path)
+                  if f'{os.sep}envs{os.sep}' not in d and f'{os.sep}conda' not in d.lower()
+                  and f'{os.sep}.venv{os.sep}' not in d and f'{os.sep}virtualenvs{os.sep}' not in d]
+    env['PATH'] = os.pathsep.join(clean_path)
     return env
 
 
