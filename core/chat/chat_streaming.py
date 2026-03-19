@@ -721,6 +721,10 @@ class StreamingChat:
 
         except ConnectionError as e:
             logger.warning(f"[STREAMING] {e}")
+            # Save error so history doesn't end with a dangling user message
+            self.main_chat.session_manager.add_assistant_final(
+                f"[Connection error: {e}]"
+            )
             self._cleanup_stream()
             raise
         except Exception as e:
@@ -730,6 +734,13 @@ class StreamingChat:
         
         finally:
             logger.info(f"[CLEANUP] [STREAMING FINALLY] Cleaning up, cancel_flag={self.cancel_flag}")
+            # Close any open tool cycle so history isn't left in a broken state
+            # (e.g. user hit Stop mid-tool-execution)
+            if self.main_chat.session_manager._in_tool_cycle:
+                logger.info("[CLEANUP] Closing orphaned tool cycle from cancelled stream")
+                self.main_chat.session_manager.add_assistant_final(
+                    content="[Cancelled during tool execution]"
+                )
             self._cleanup_stream()
             self.cancel_flag = False
             self.is_streaming = False

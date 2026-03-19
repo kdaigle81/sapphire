@@ -605,18 +605,21 @@ class StoryEngine:
     def rollback_to_turn(self, target_turn: int) -> bool:
         """Rollback state to a specific turn by replaying log."""
         try:
+            # Capture preset name before we wipe state_current — it's not in state_log
+            preset_name = self._preset_name
+
             with self._get_connection() as conn:
                 conn.execute("DELETE FROM state_log WHERE chat_name = ? AND turn_number > ?",
                             (self.chat_name, target_turn))
                 conn.execute("DELETE FROM state_current WHERE chat_name = ?", (self.chat_name,))
-                
+
                 cursor = conn.execute(
                     """SELECT key, new_value, changed_by, turn_number, timestamp
                        FROM state_log WHERE chat_name = ? AND turn_number <= ?
                        ORDER BY id ASC""",
                     (self.chat_name, target_turn)
                 )
-                
+
                 rebuilt_state = {}
                 for row in cursor:
                     rebuilt_state[row["key"]] = {
@@ -625,18 +628,25 @@ class StoryEngine:
                         "turn_number": row["turn_number"],
                         "timestamp": row["timestamp"]
                     }
-                
+
                 for key, data in rebuilt_state.items():
                     value = data["value"]
                     conn.execute(
-                        """INSERT INTO state_current 
+                        """INSERT INTO state_current
                            (chat_name, key, value, value_type, label, constraints, updated_at, updated_by, turn_number)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (self.chat_name, key, json.dumps(value), infer_type(value),
                          None, None, data["timestamp"], data["changed_by"], data["turn_number"])
                     )
                 conn.commit()
-            
+
+            # Re-persist system keys so _load_state() can find them
+            if preset_name:
+                self._persist_system_key("_preset", preset_name, 0)
+            if self._scene_entered_at_turn is not None:
+                self._persist_system_key("_scene_entered_at", self._scene_entered_at_turn, 0)
+
+            # _load_state -> reload_preset_config restores constraints from preset
             self._load_state()
             logger.info(f"Rolled back '{self.chat_name}' to turn {target_turn}, {len(self._current_state)} keys")
             return True
