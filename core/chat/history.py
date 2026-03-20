@@ -1148,6 +1148,7 @@ class ChatSessionManager:
                 )
                 conn.commit()
                 logger.debug(f"Appended message pair to chat '{chat_name}'")
+                publish(Events.MESSAGE_ADDED, {"role": "pair", "chat_name": chat_name})
         except Exception as e:
             logger.error(f"Failed to append to chat '{chat_name}': {e}")
 
