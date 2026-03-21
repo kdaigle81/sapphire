@@ -1,3 +1,6 @@
+# 2.4.1 - Daemon and Telegram
+- Daemon support only loads active accounts
+- Telegram has bot support (kept Client support too)
 # 2.4.0 - Presence Update
 ## March 19, 2026
 - Milestone release since 2.2.8
