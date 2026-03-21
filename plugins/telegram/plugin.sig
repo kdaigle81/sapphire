@@ -2,11 +2,12 @@
   "plugin": "telegram",
   "version": "1.0.0",
   "files": {
-    "daemon.py": "sha256:91c672ed3d729de5ea2c6280786397d3fd0eb5882d8a9fca5afacc35444c58ae",
-    "plugin.json": "sha256:2b4cdad71d3dcd6b454b98f8c8a498312d5208d15d93ad2da22110e09f7e849c",
-    "routes/auth.py": "sha256:70090d2888b82ad02cb58f11d7964d1bd48a5ff48dbe7d84114c492aa1f5923e",
+    "README.md": "sha256:2480aee6378f6da5dd95b5fa520426bd9c2226ebdf4bf6b36d53014e10e631db",
+    "daemon.py": "sha256:0e7913a86254bf9ebeec94e9fb9fab3ef9d1b93e86ef10dcea1742d980d1960e",
+    "plugin.json": "sha256:7e543dc06ce5d6a183be761c1522498136fea70ef57084984a91a01f72ee70fe",
+    "routes/auth.py": "sha256:45214a068636817969fb52afe76c50e7ea6e6890dfc63d09d45d7a205cc0a5be",
     "tools/telegram_tools.py": "sha256:80645a6223c6115d4e420cde9e26a6c862e3c625305a90dd81fa5d2d352cd6d9",
-    "web/index.js": "sha256:b89f2c5e0b10c0b6dcfb396ab07e66e4e4b7cd5bd459946b9bdb8e1647a73e13"
+    "web/index.js": "sha256:f333d4513173a496e2e0073f6baf597b6a68a793870abef0ec8ec333fc1a3c2e"
   },
-  "signature": "75HEWvl1ipmpvMfuum5xpWGJCD/1u4avQTJICZHyCl5CZ6W2DXjBNcb/Na4rTWz8SzGYU1NSnET3mECTsBHjAw=="
+  "signature": "ccSvDHzu9fjtAf1EHf04UqfbzMmmpJWw3jYcyfy6jIqa0ONrwco/EM64+BlFim5SKE4upMq5OOyTa5BHzkAxDQ=="
 }

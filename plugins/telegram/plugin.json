@@ -1,7 +1,7 @@
 {
   "name": "telegram",
   "version": "1.0.0",
-  "description": "Telegram — daemon messaging via Client API (Telethon)",
+  "description": "Telegram — bot and client accounts via Telethon",
   "author": "sapphire",
   "url": "https://sapphireblue.dev",
   "icon": "\u2708\ufe0f",
@@ -47,6 +47,7 @@
     "routes": [
       {"method": "GET",  "path": "accounts",          "handler": "routes/auth.py:list_accounts"},
       {"method": "POST", "path": "accounts",          "handler": "routes/auth.py:start_auth"},
+      {"method": "POST", "path": "accounts/bot",      "handler": "routes/auth.py:start_bot_auth"},
       {"method": "POST", "path": "auth/code",         "handler": "routes/auth.py:submit_code"},
       {"method": "POST", "path": "auth/2fa",          "handler": "routes/auth.py:submit_2fa"},
       {"method": "DELETE","path": "accounts/{name}",   "handler": "routes/auth.py:delete_account"}

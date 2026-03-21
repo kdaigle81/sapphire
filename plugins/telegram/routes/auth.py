@@ -36,13 +36,21 @@ async def list_accounts(**kwargs):
     state = _get_state()
     accounts_meta = state.get("accounts", {})
 
-    accounts = []
+    # Collect account names from session files + metadata (bots may lack session files)
+    account_names = set()
     for session_file in SESSION_DIR.glob("*.session"):
         name = session_file.stem
-        if name.startswith("_"):
-            continue
+        if not name.startswith("_"):
+            account_names.add(name)
+    for name, meta in accounts_meta.items():
+        if meta.get("type") == "bot":
+            account_names.add(name)
+
+    accounts = []
+    for name in sorted(account_names):
         meta = accounts_meta.get(name, {})
         from plugins.telegram.daemon import list_connected
+        acct_type = meta.get("type", "client")
         accounts.append({
             "name": name,
             "value": name,  # for dynamic select compatibility
@@ -50,9 +58,85 @@ async def list_accounts(**kwargs):
             "phone": meta.get("phone", ""),
             "username": meta.get("username", ""),
             "connected": name in list_connected(),
+            "type": acct_type,
         })
 
     return {"accounts": accounts}
+
+
+async def start_bot_auth(**kwargs):
+    """POST /api/plugin/telegram/accounts/bot — add a bot account via token."""
+    body = kwargs.get("body", {})
+    bot_token = body.get("bot_token", "").strip()
+    account_name = body.get("account_name", "").strip()
+
+    if not bot_token:
+        return {"error": "Bot token required (get one from @BotFather)"}
+    if not account_name:
+        return {"error": "Account name required"}
+
+    account_name = "".join(c for c in account_name if c.isalnum() or c in "-_").lower()
+    if not account_name:
+        return {"error": "Invalid account name"}
+
+    settings = _get_settings()
+    api_id = settings.get("api_id", "")
+    api_hash = settings.get("api_hash", "")
+    if not api_id or not api_hash:
+        return {"error": "API ID and API Hash must be configured in plugin settings first"}
+
+    SESSION_DIR.mkdir(parents=True, exist_ok=True)
+
+    try:
+        from telethon import TelegramClient
+
+        session_path = str(SESSION_DIR / account_name)
+        client = TelegramClient(session_path, int(api_id), api_hash)
+        await client.start(bot_token=bot_token)
+        me = await client.get_me()
+        await client.disconnect()
+
+        # Save account metadata
+        state = _get_state()
+        accounts_meta = state.get("accounts", {})
+        accounts_meta[account_name] = {
+            "type": "bot",
+            "bot_token": bot_token,
+            "username": me.username or "",
+            "display_name": me.first_name or account_name,
+            "user_id": me.id,
+        }
+        state.save("accounts", accounts_meta)
+
+        logger.info(f"[TELEGRAM] Bot '{account_name}' authenticated as @{me.username or me.first_name}")
+
+        # Hot-connect to running daemon
+        try:
+            from plugins.telegram.daemon import _loop, _connect_single
+            if _loop and _loop.is_running():
+                import asyncio
+                asyncio.run_coroutine_threadsafe(_connect_single(account_name), _loop)
+        except Exception:
+            pass
+
+        return {
+            "status": "authenticated",
+            "account_name": account_name,
+            "username": me.username or "",
+            "display_name": me.first_name or account_name,
+            "type": "bot",
+        }
+
+    except Exception as e:
+        logger.error(f"[TELEGRAM] Bot auth failed: {e}")
+        # Clean up session if created
+        session_file = SESSION_DIR / f"{account_name}.session"
+        if session_file.exists():
+            try:
+                session_file.unlink()
+            except Exception:
+                pass
+        return {"error": str(e)}
 
 
 async def start_auth(**kwargs):
@@ -209,6 +293,7 @@ async def _finalize_auth(account_name, client, phone):
     state = _get_state()
     accounts_meta = state.get("accounts", {})
     accounts_meta[account_name] = {
+        "type": "client",
         "phone": phone,
         "username": me.username or "",
         "display_name": me.first_name or account_name,

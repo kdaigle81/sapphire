@@ -18,7 +18,7 @@ registerPluginSettings({
     id: PLUGIN_NAME,
     name: 'Telegram',
     icon: '\u2708\ufe0f',
-    helpText: 'Telegram Client API — accounts and daemon settings',
+    helpText: 'Telegram bot and client accounts — daemon messaging',
 
     render(container, settings) {
         container.innerHTML = `
@@ -27,7 +27,10 @@ registerPluginSettings({
             <h4 style="margin:0 0 12px">Accounts</h4>
             <div id="tg-accounts-list"></div>
             <div id="tg-auth-wizard" style="display:none"></div>
-            <button class="btn btn-sm" id="tg-add-account" style="margin-top:12px">+ Add Account</button>
+            <div style="display:flex;gap:8px;margin-top:12px">
+                <button class="btn btn-sm btn-primary" id="tg-add-bot">+ Add Bot</button>
+                <button class="btn btn-sm" id="tg-add-client">+ Add Client</button>
+            </div>
         `;
 
         // Render standard settings (saved via header "Save Changes" button)
@@ -36,8 +39,11 @@ registerPluginSettings({
         // Load accounts
         _loadAccounts(container);
 
-        // Add account button
-        container.querySelector('#tg-add-account')?.addEventListener('click', () => {
+        // Add account buttons
+        container.querySelector('#tg-add-bot')?.addEventListener('click', () => {
+            _showBotWizard(container);
+        });
+        container.querySelector('#tg-add-client')?.addEventListener('click', () => {
             _showAuthWizard(container);
         });
     },
@@ -62,17 +68,21 @@ async function _loadAccounts(container) {
             return;
         }
 
-        list.innerHTML = accounts.map(a => `
+        list.innerHTML = accounts.map(a => {
+            const icon = a.type === 'bot' ? '\u{1F916}' : '\u{1F4F1}';
+            const typeLabel = a.type === 'bot' ? 'Bot' : 'Client';
+            const detail = a.type === 'bot' ? (a.username ? `@${_esc(a.username)}` : '') : (a.phone || '');
+            return `
             <div class="setting-row" style="padding:10px 0;border-bottom:1px solid var(--border)" data-account="${_esc(a.name)}">
                 <div class="setting-label">
-                    <label>${_esc(a.label || a.name)}${a.username ? ` <span class="text-muted">@${_esc(a.username)}</span>` : ''}</label>
-                    <div class="setting-help">${a.phone || ''} ${a.connected ? '<span style="color:var(--success)">Connected</span>' : '<span class="text-muted">Disconnected</span>'}</div>
+                    <label>${icon} ${_esc(a.label || a.name)}${a.username ? ` <span class="text-muted">@${_esc(a.username)}</span>` : ''}</label>
+                    <div class="setting-help">${typeLabel} ${detail} ${a.connected ? '<span style="color:var(--success)">Connected</span>' : '<span class="text-muted">Disconnected</span>'}</div>
                 </div>
                 <div class="setting-input">
                     <button class="btn btn-sm btn-danger tg-delete-account" data-name="${_esc(a.name)}">Remove</button>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
 
         // Wire delete buttons
         list.querySelectorAll('.tg-delete-account').forEach(btn => {
@@ -96,6 +106,71 @@ async function _loadAccounts(container) {
     } catch (e) {
         list.innerHTML = `<p style="color:var(--error)">Could not load accounts: ${e.message}</p>`;
     }
+}
+
+function _showBotWizard(container) {
+    const wizard = container.querySelector('#tg-auth-wizard');
+    if (!wizard) return;
+    wizard.style.display = 'block';
+
+    wizard.innerHTML = `
+        <div style="padding:14px;background:var(--bg-secondary);border-radius:var(--radius-sm);border:1px solid var(--border);margin-top:12px">
+            <h5 style="margin:0 0 10px">\u{1F916} Add Telegram Bot</h5>
+            <div class="setting-row" style="padding:4px 0">
+                <div class="setting-label"><label>Account Name</label><div class="setting-help">A short label like "sapphire-bot"</div></div>
+                <div class="setting-input"><input type="text" id="tg-bot-name" placeholder="sapphire-bot" style="width:100%"></div>
+            </div>
+            <div class="setting-row" style="padding:4px 0">
+                <div class="setting-label"><label>Bot Token</label><div class="setting-help">From @BotFather on Telegram</div></div>
+                <div class="setting-input"><input type="text" id="tg-bot-token" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v" style="width:100%"></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+                <button class="btn btn-primary btn-sm" id="tg-bot-connect">Connect</button>
+                <button class="btn btn-sm" id="tg-bot-cancel">Cancel</button>
+            </div>
+            <div id="tg-bot-status" class="text-muted" style="margin-top:8px;font-size:0.85em"></div>
+        </div>
+    `;
+
+    wizard.querySelector('#tg-bot-cancel')?.addEventListener('click', () => {
+        wizard.style.display = 'none';
+        wizard.innerHTML = '';
+    });
+
+    wizard.querySelector('#tg-bot-connect')?.addEventListener('click', async () => {
+        const name = wizard.querySelector('#tg-bot-name')?.value?.trim();
+        const token = wizard.querySelector('#tg-bot-token')?.value?.trim();
+        if (!name || !token) {
+            _setStatus(wizard, 'Account name and bot token required', true, '#tg-bot-status');
+            return;
+        }
+
+        const btn = wizard.querySelector('#tg-bot-connect');
+        btn.disabled = true;
+        btn.textContent = 'Connecting...';
+        _setStatus(wizard, 'Connecting to Telegram...', false, '#tg-bot-status');
+
+        try {
+            const res = await fetch('/api/plugin/telegram/accounts/bot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF() },
+                body: JSON.stringify({ account_name: name, bot_token: token })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+
+            _setStatus(wizard, `Connected as @${data.username || data.display_name}`, false, '#tg-bot-status');
+            setTimeout(() => {
+                wizard.style.display = 'none';
+                wizard.innerHTML = '';
+                _loadAccounts(container);
+            }, 1500);
+        } catch (e) {
+            _setStatus(wizard, e.message, true, '#tg-bot-status');
+            btn.disabled = false;
+            btn.textContent = 'Connect';
+        }
+    });
 }
 
 function _showAuthWizard(container) {
@@ -252,8 +327,8 @@ function _showAuthWizard(container) {
     });
 }
 
-function _setStatus(wizard, msg, isError = false) {
-    const el = wizard.querySelector('#tg-auth-status');
+function _setStatus(wizard, msg, isError = false, selector = '#tg-auth-status') {
+    const el = wizard.querySelector(selector);
     if (!el) return;
     el.textContent = msg;
     el.style.color = isError ? 'var(--error)' : 'var(--text-muted)';

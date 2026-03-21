@@ -589,7 +589,7 @@ async function loadSidebar() {
             const accounts = telegramAccountsData?.accounts || [];
             telegramScopeSel.innerHTML = '<option value="none">None</option>' +
                 accounts.map(a =>
-                    `<option value="${a.name}">${a.label || a.name}${a.username ? ' (@' + a.username + ')' : ''}</option>`
+                    `<option value="${a.name}">${a.type === 'bot' ? '\u{1F916}' : '\u{1F4F1}'} ${a.label || a.name}${a.username ? ' (@' + a.username + ')' : ''}</option>`
                 ).join('');
             setSelect(telegramScopeSel, settings.telegram_scope || 'default');
         }

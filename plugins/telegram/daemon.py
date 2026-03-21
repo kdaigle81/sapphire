@@ -130,27 +130,49 @@ async def _connect_accounts(plugin_loader, api_id: int, api_hash: str):
         logger.info("[TELEGRAM] No active daemon tasks — not connecting any accounts")
         return
 
-    # Each .session file = one account
+    # Load account metadata for type detection
+    state = plugin_loader.get_plugin_state("telegram")
+    accounts_meta = state.get("accounts", {}) if state else {}
+
+    # Each .session file = one account (bots may not have one yet)
+    known_accounts = set()
     for session_file in SESSION_DIR.glob("*.session"):
-        account_name = session_file.stem
-        if account_name.startswith("_"):
-            continue  # skip temp auth sessions
+        name = session_file.stem
+        if not name.startswith("_"):
+            known_accounts.add(name)
+    # Bot accounts might not have a session file yet — include them from metadata
+    for name, meta in accounts_meta.items():
+        if meta.get("type") == "bot":
+            known_accounts.add(name)
+
+    for account_name in known_accounts:
         if account_name not in active:
             logger.debug(f"[TELEGRAM] Skipping '{account_name}' — no active daemon task")
             continue
 
+        meta = accounts_meta.get(account_name, {})
+        acct_type = meta.get("type", "client")
         session_path = str(SESSION_DIR / account_name)
+
         try:
             client = TelegramClient(session_path, api_id, api_hash)
-            await client.connect()
 
-            if not await client.is_user_authorized():
-                logger.warning(f"[TELEGRAM] Account '{account_name}' session expired — skipping")
-                await client.disconnect()
-                continue
+            if acct_type == "bot":
+                bot_token = meta.get("bot_token", "")
+                if not bot_token:
+                    logger.warning(f"[TELEGRAM] Bot '{account_name}' has no token — skipping")
+                    continue
+                await client.start(bot_token=bot_token)
+            else:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    logger.warning(f"[TELEGRAM] Account '{account_name}' session expired — skipping")
+                    await client.disconnect()
+                    continue
 
             me = await client.get_me()
-            logger.info(f"[TELEGRAM] Connected: {account_name} (@{me.username or me.first_name})")
+            label = f"@{me.username}" if me.username else me.first_name
+            logger.info(f"[TELEGRAM] Connected {acct_type}: {account_name} ({label})")
 
             # Register message handler
             @client.on(events.NewMessage(incoming=True))
@@ -213,15 +235,28 @@ async def _connect_single(account_name: str):
     if not _api_id or not _api_hash:
         return
 
+    # Load account metadata for type detection
+    from core.plugin_loader import plugin_loader as pl
+    state = pl.get_plugin_state("telegram")
+    meta = (state.get("accounts", {}) if state else {}).get(account_name, {})
+    acct_type = meta.get("type", "client")
+
     session_path = str(SESSION_DIR / account_name)
     try:
         client = TelegramClient(session_path, _api_id, _api_hash)
-        await client.connect()
 
-        if not await client.is_user_authorized():
-            logger.warning(f"[TELEGRAM] Account '{account_name}' not authorized after auth")
-            await client.disconnect()
-            return
+        if acct_type == "bot":
+            bot_token = meta.get("bot_token", "")
+            if not bot_token:
+                logger.warning(f"[TELEGRAM] Bot '{account_name}' has no token")
+                return
+            await client.start(bot_token=bot_token)
+        else:
+            await client.connect()
+            if not await client.is_user_authorized():
+                logger.warning(f"[TELEGRAM] Account '{account_name}' not authorized after auth")
+                await client.disconnect()
+                return
 
         me = await client.get_me()
 
@@ -230,7 +265,8 @@ async def _connect_single(account_name: str):
             await _handle_message(_plugin_loader, _name, event)
 
         _clients[account_name] = client
-        logger.info(f"[TELEGRAM] Hot-connected: {account_name} (@{me.username or me.first_name})")
+        label = f"@{me.username}" if me.username else me.first_name
+        logger.info(f"[TELEGRAM] Hot-connected {acct_type}: {account_name} ({label})")
 
     except Exception as e:
         logger.error(f"[TELEGRAM] Failed to hot-connect '{account_name}': {e}")
