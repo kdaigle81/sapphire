@@ -1151,7 +1151,18 @@ body {
 .ts-module-header {
     padding: 10px 12px;
     background: var(--bg-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
+.ts-collapse-chevron {
+    font-size: 10px;
+    transition: transform 0.15s;
+    color: var(--text-muted);
+}
+.ts-module:not(.collapsed) .ts-collapse-chevron { transform: rotate(90deg); }
+.ts-module.collapsed .ts-func-list { display: none; }
 
 .ts-module-toggle {
     display: flex;

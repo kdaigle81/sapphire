@@ -40,6 +40,13 @@ let functions = null;
 let selectedName = null;
 let saveTimer = null;
 
+function getCollapsed() {
+    try { return JSON.parse(localStorage.getItem('ts-collapsed') || '{}'); } catch { return {}; }
+}
+function setCollapsed(state) {
+    localStorage.setItem('ts-collapsed', JSON.stringify(state));
+}
+
 export default {
     init(el) {
         container = el;
@@ -214,15 +221,18 @@ function renderFunctions(selected, isEditable) {
         </div>` : '';
 
     const modules = functions.modules;
+    const collapsed = getCollapsed();
     return bulkBar + Object.entries(modules).map(([modName, mod]) => {
         const funcs = mod.functions || [];
         const enabledCount = funcs.filter(f => enabledSet.has(f.name)).length;
         const allChecked = enabledCount === funcs.length;
         const someChecked = enabledCount > 0 && !allChecked;
+        const isCollapsed = !!collapsed[modName];
 
         return `
-            <div class="ts-module">
-                <div class="ts-module-header">
+            <div class="ts-module${isCollapsed ? ' collapsed' : ''}">
+                <div class="ts-module-header" data-collapse="${modName}">
+                    <span class="ts-collapse-chevron">\u25B6</span>
                     <label class="ts-module-toggle">
                         <input type="checkbox" data-action="toggle-module" data-module="${modName}"
                             ${allChecked ? 'checked' : ''} ${someChecked ? 'data-indeterminate="true"' : ''}
@@ -373,6 +383,22 @@ function bindEvents() {
     container.querySelector('#ts-uncheck-all')?.addEventListener('click', () => {
         container.querySelectorAll('[data-action="toggle-func"]').forEach(cb => cb.checked = false);
         updateCounts(); debouncedSave();
+    });
+
+    // Module collapse toggles
+    container.querySelectorAll('[data-collapse]').forEach(hdr => {
+        hdr.addEventListener('click', e => {
+            if (e.target.closest('input, label')) return; // don't collapse on checkbox click
+            const mod = hdr.dataset.collapse;
+            const parent = hdr.closest('.ts-module');
+            const state = getCollapsed();
+            if (parent.classList.toggle('collapsed')) {
+                state[mod] = true;
+            } else {
+                delete state[mod];
+            }
+            setCollapsed(state);
+        });
     });
 
     // Function toggles
