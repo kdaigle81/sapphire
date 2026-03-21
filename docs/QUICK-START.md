@@ -187,7 +187,7 @@ Connect Sapphire to your Telegram account.
 4. Scroll down → **+ Add Account** → enter phone → enter code Telegram sends you
 5. Enable Telegram tools in your toolset
 
-Now the AI can read your chats and send messages. See [TELEGRAM.md](integrations/TELEGRAM.md) for full details.
+Now the AI can read your chats and send messages. See the Telegram plugin docs in Help → Plugins for full details.
 
 ---
 
@@ -201,7 +201,7 @@ Connect a Discord bot to your server.
 4. In Sapphire: Settings → Plugins → Discord → paste bot token
 5. Enable Discord tools in your toolset
 
-The AI can read channels and send messages. See [DISCORD.md](integrations/DISCORD.md) for full details.
+The AI can read channels and send messages. See the Discord plugin docs in Help → Plugins for full details.
 
 ---
 
@@ -215,7 +215,7 @@ Connect your email inbox.
 3. Enable Email tools in your toolset
 4. Add contacts in **Mind → People** to whitelist who the AI can email
 
-The AI can read your inbox and send emails — but only to people you've added to contacts. See [EMAIL.md](integrations/EMAIL.md) for full details.
+The AI can read your inbox and send emails — but only to people you've added to contacts. See the Email plugin docs in Help → Plugins for full details.
 
 ---
 

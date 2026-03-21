@@ -1,5 +1,6 @@
 """Serve docs/ markdown files for the in-app help encyclopedia."""
 
+import json
 import re
 import logging
 from pathlib import Path
@@ -34,6 +35,27 @@ def _build_tree():
                 children.append({"name": name, "path": rel, "type": "file"})
             if children:
                 items.append({"name": p.name, "path": p.name, "type": "folder", "children": children})
+    # Plugin READMEs
+    plugin_children = []
+    for pdir in [ROOT_DIR / "plugins", ROOT_DIR / "user" / "plugins"]:
+        if not pdir.exists():
+            continue
+        for readme in sorted(pdir.glob("*/README.md")):
+            plugin_name = readme.parent.name
+            display = plugin_name
+            manifest = readme.parent / "plugin.json"
+            if manifest.exists():
+                try:
+                    mdata = json.loads(manifest.read_text(encoding='utf-8'))
+                    # Use description before the dash, or fall back to name
+                    desc = mdata.get("description", "")
+                    display = desc.split("\u2014")[0].split(" - ")[0].strip() if desc else mdata.get("name", plugin_name)
+                except Exception:
+                    pass
+            plugin_children.append({"name": display, "path": f"_plugins/{plugin_name}/README.md", "type": "file"})
+    if plugin_children:
+        items.append({"name": "Plugins", "path": "plugins", "type": "folder", "children": plugin_children})
+
     # Changelog pinned last
     changelog = DOCS_DIR / "CHANGELOG.md"
     if changelog.exists():
@@ -55,11 +77,13 @@ async def search_docs(request: Request, q: str = "", _=Depends(require_login)):
 
     query = q.lower()
     results = []
-    # Include root README in search
+    # Include root README and plugin READMEs in search
     search_files = list(DOCS_DIR.rglob("*.md"))
     root_readme = ROOT_DIR / "README.md"
     if root_readme.exists():
         search_files.append(root_readme)
+    for pdir in [ROOT_DIR / "plugins", ROOT_DIR / "user" / "plugins"]:
+        search_files.extend(pdir.glob("*/README.md")) if pdir.exists() else None
     for md in search_files:
         try:
             text = md.read_text(encoding='utf-8')
@@ -79,7 +103,12 @@ async def search_docs(request: Request, q: str = "", _=Depends(require_login)):
                     break
 
         if matches:
-            rel = "_root/README.md" if md == root_readme else str(md.relative_to(DOCS_DIR))
+            if md == root_readme:
+                rel = "_root/README.md"
+            elif str(md).startswith(str(ROOT_DIR / "plugins")) or str(md).startswith(str(ROOT_DIR / "user" / "plugins")):
+                rel = f"_plugins/{md.parent.name}/README.md"
+            else:
+                rel = str(md.relative_to(DOCS_DIR))
             # Extract title from first heading
             title = md.stem
             for line in lines[:5]:
@@ -99,6 +128,17 @@ async def get_doc(path: str, request: Request, _=Depends(require_login)):
     # Special prefix for root README
     if path == "_root/README.md":
         target = ROOT_DIR / "README.md"
+    elif path.startswith("_plugins/"):
+        # e.g. _plugins/telegram/README.md → plugins/telegram/README.md
+        rel = path[len("_plugins/"):]
+        target = (ROOT_DIR / "plugins" / rel).resolve()
+        # Also check user plugins
+        if not target.exists():
+            target = (ROOT_DIR / "user" / "plugins" / rel).resolve()
+        plugins_root = str((ROOT_DIR / "plugins").resolve())
+        user_plugins_root = str((ROOT_DIR / "user" / "plugins").resolve())
+        if not (str(target).startswith(plugins_root) or str(target).startswith(user_plugins_root)):
+            raise HTTPException(status_code=403, detail="Access denied")
     else:
         target = (DOCS_DIR / path).resolve()
         # Prevent directory traversal
