@@ -543,11 +543,9 @@ async def set_start_in_privacy(request: Request, _=Depends(require_login)):
 
 @router.get("/api/llm/providers")
 async def get_llm_providers(request: Request, _=Depends(require_login)):
-    """Get LLM providers configuration."""
-    from core.settings_manager import settings
-    from core.chat.llm_providers import get_available_providers, PROVIDER_METADATA
-    providers_config = settings.get('LLM_PROVIDERS', {})
-    providers_list = get_available_providers(providers_config)
+    """Get all providers (core + custom) with metadata."""
+    from core.chat.llm_providers import provider_registry, PROVIDER_METADATA
+    providers_list = provider_registry.get_all_providers()
     metadata = {k: {
                     'model_options': v.get('model_options'),
                     'is_local': v.get('is_local', False),
@@ -562,25 +560,35 @@ async def get_llm_providers(request: Request, _=Depends(require_login)):
 
 @router.put("/api/llm/providers/{provider_key}")
 async def update_llm_provider(provider_key: str, request: Request, _=Depends(require_login)):
-    """Update LLM provider settings."""
+    """Update LLM provider settings (core or custom)."""
     from core.settings_manager import settings
+    from core.chat.llm_providers import provider_registry
     data = await request.json()
-    providers = settings.get('LLM_PROVIDERS', {})
-    if provider_key not in providers:
-        raise HTTPException(status_code=404, detail=f"Provider '{provider_key}' not found")
 
-    # Route API keys to credentials manager, not settings.json
+    # Route API keys to credentials manager
     api_key = data.pop('api_key', None)
     if api_key is not None and api_key.strip():
         from core.credentials_manager import credentials
         credentials.set_llm_api_key(provider_key, api_key.strip())
 
-    providers[provider_key].update(data)
+    # Determine if core or custom
+    if provider_registry.is_core_provider(provider_key):
+        providers = settings.get('LLM_PROVIDERS', {})
+        if provider_key not in providers:
+            raise HTTPException(status_code=404, detail=f"Provider '{provider_key}' not found")
+        providers[provider_key].update(data)
+        for prov in providers.values():
+            prov.pop('api_key', None)
+        settings.set('LLM_PROVIDERS', providers, persist=True)
+    else:
+        custom = settings.get('LLM_CUSTOM_PROVIDERS', {})
+        if provider_key not in custom:
+            raise HTTPException(status_code=404, detail=f"Provider '{provider_key}' not found")
+        custom[provider_key].update(data)
+        for prov in custom.values():
+            prov.pop('api_key', None)
+        settings.set('LLM_CUSTOM_PROVIDERS', custom, persist=True)
 
-    # Strip api_key from all providers before persisting — keys live in credentials.json only
-    for prov in providers.values():
-        prov.pop('api_key', None)
-    settings.set('LLM_PROVIDERS', providers, persist=True)
     return {"status": "success", "provider": provider_key}
 
 
@@ -599,7 +607,7 @@ async def test_llm_provider(provider_key: str, request: Request, _=Depends(requi
     """Test LLM provider connection via health_check()."""
     from core.chat.llm_providers import get_provider_by_key
     try:
-        providers_config = dict(getattr(config, 'LLM_PROVIDERS', {}))
+        providers_config = {**dict(getattr(config, 'LLM_PROVIDERS', {})), **dict(getattr(config, 'LLM_CUSTOM_PROVIDERS', {}))}
         if provider_key not in providers_config:
             return {"status": "error", "error": f"Unknown provider: {provider_key}"}
 
@@ -629,3 +637,121 @@ async def test_llm_provider(provider_key: str, request: Request, _=Depends(requi
     except Exception as e:
         logger.error(f"LLM provider test failed for '{provider_key}': {e}")
         return {"status": "error", "error": "Provider test failed — check API key and endpoint configuration"}
+
+
+@router.post("/api/llm/custom-providers")
+async def add_custom_provider(request: Request, _=Depends(require_login)):
+    """Create a new custom provider instance."""
+    from core.settings_manager import settings
+    from core.chat.llm_providers import provider_registry
+    data = await request.json()
+
+    name = data.get('name', '').strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Provider name required")
+
+    # Sanitize name
+    name = "".join(c for c in name if c.isalnum() or c in "-_").lower()
+    if not name:
+        raise HTTPException(status_code=400, detail="Invalid provider name")
+
+    # Check reserved / duplicate
+    if provider_registry.is_core_provider(name):
+        raise HTTPException(status_code=400, detail=f"Name '{name}' is reserved for a core provider")
+
+    custom = settings.get('LLM_CUSTOM_PROVIDERS', {})
+    if name in custom:
+        raise HTTPException(status_code=400, detail=f"Provider '{name}' already exists")
+
+    # Route API key to credentials
+    api_key = data.pop('api_key', None)
+    if api_key and api_key.strip():
+        from core.credentials_manager import credentials
+        credentials.set_llm_api_key(name, api_key.strip())
+
+    # Build config
+    template = data.get('template', 'openai')
+    provider_config = {
+        'template': template,
+        'display_name': data.get('display_name', name),
+        'base_url': data.get('base_url', ''),
+        'model': data.get('model', ''),
+        'enabled': data.get('enabled', True),
+        'use_as_fallback': data.get('use_as_fallback', True),
+        'is_local': data.get('is_local', False),
+        'timeout': data.get('timeout', 0.3 if data.get('is_local') else 10.0),
+    }
+    # Optional fields
+    for field in ('api_key_env', 'generation_params', 'auto_discover_models',
+                  'session_affinity', 'strip_penalties', 'suggested_models',
+                  'thinking_enabled', 'thinking_budget', 'reasoning_effort'):
+        if field in data:
+            provider_config[field] = data[field]
+
+    custom[name] = provider_config
+    settings.set('LLM_CUSTOM_PROVIDERS', custom, persist=True)
+
+    # Add to fallback order
+    order = settings.get('LLM_FALLBACK_ORDER', [])
+    if name not in order:
+        order.append(name)
+        settings.set('LLM_FALLBACK_ORDER', order, persist=True)
+
+    return {"status": "success", "name": name, "config": provider_config}
+
+
+@router.delete("/api/llm/custom-providers/{provider_key}")
+async def delete_custom_provider(provider_key: str, request: Request, _=Depends(require_login)):
+    """Remove a custom provider instance."""
+    from core.settings_manager import settings
+    from core.chat.llm_providers import provider_registry
+
+    if provider_registry.is_core_provider(provider_key):
+        raise HTTPException(status_code=400, detail="Cannot delete core providers")
+
+    custom = settings.get('LLM_CUSTOM_PROVIDERS', {})
+    if provider_key not in custom:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_key}' not found")
+
+    custom.pop(provider_key)
+    settings.set('LLM_CUSTOM_PROVIDERS', custom, persist=True)
+
+    # Remove from fallback order
+    order = settings.get('LLM_FALLBACK_ORDER', [])
+    if provider_key in order:
+        order.remove(provider_key)
+        settings.set('LLM_FALLBACK_ORDER', order, persist=True)
+
+    # Clean up credentials
+    try:
+        from core.credentials_manager import credentials
+        credentials.clear_llm_api_key(provider_key)
+    except Exception:
+        pass
+
+    return {"status": "success", "name": provider_key}
+
+
+@router.get("/api/llm/presets")
+async def get_llm_presets(request: Request, _=Depends(require_login)):
+    """Get available provider presets."""
+    from core.chat.llm_providers import provider_registry
+    return {"presets": provider_registry.get_presets(), "templates": provider_registry.get_templates()}
+
+
+@router.get("/api/llm/custom-providers/{provider_key}/models")
+async def discover_models(provider_key: str, request: Request, _=Depends(require_login)):
+    """Discover available models from a provider (hits /v1/models)."""
+    from core.chat.llm_providers import provider_registry
+
+    def _discover():
+        models = provider_registry.discover_models(provider_key)
+        return models
+
+    try:
+        models = await asyncio.to_thread(_discover)
+        if models is None:
+            return {"models": [], "error": "Model discovery not supported for this provider"}
+        return {"models": models}
+    except Exception as e:
+        return {"models": [], "error": str(e)}

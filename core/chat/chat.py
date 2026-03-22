@@ -498,7 +498,7 @@ class LLMChat:
             gen_params = get_generation_params(
                 provider_key, 
                 effective_model, 
-                getattr(config, 'LLM_PROVIDERS', {})
+                {**getattr(config, 'LLM_PROVIDERS', {}), **getattr(config, 'LLM_CUSTOM_PROVIDERS', {})}
             )
             
             # Pass model override to provider if set
@@ -839,7 +839,7 @@ class LLMChat:
         """Select LLM provider using per-chat settings or fallback order. Returns (provider_key, provider, model_override) tuple or raises."""
         
         if self._use_new_config:
-            providers_config = config.LLM_PROVIDERS
+            providers_config = {**config.LLM_PROVIDERS, **getattr(config, 'LLM_CUSTOM_PROVIDERS', {})}
             fallback_order = getattr(config, 'LLM_FALLBACK_ORDER', list(providers_config.keys()))
             
             # Check per-chat LLM settings
@@ -1024,7 +1024,7 @@ class LLMChat:
             model_override = task_settings.get("model", "")
             
             if provider_key and provider_key not in ("auto", ""):
-                providers_config = getattr(config, 'LLM_PROVIDERS', {})
+                providers_config = {**getattr(config, 'LLM_PROVIDERS', {}), **getattr(config, 'LLM_CUSTOM_PROVIDERS', {})}
                 provider = get_provider_by_key(provider_key, providers_config, config.LLM_REQUEST_TIMEOUT, model_override=model_override)
                 if not provider:
                     raise ConnectionError(f"Provider '{provider_key}' not available")
@@ -1035,7 +1035,7 @@ class LLMChat:
             gen_params = get_generation_params(
                 provider_key, 
                 effective_model, 
-                getattr(config, 'LLM_PROVIDERS', {})
+                {**getattr(config, 'LLM_PROVIDERS', {}), **getattr(config, 'LLM_CUSTOM_PROVIDERS', {})}
             )
             if model_override:
                 gen_params['model'] = model_override

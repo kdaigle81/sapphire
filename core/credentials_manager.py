@@ -64,18 +64,26 @@ DEFAULT_CREDENTIALS = {
     }
 }
 
-# Environment variable names for each provider
-# Used by get_llm_api_key() to check env first, then override with stored credential
+# Core provider env vars (static fallback — custom providers use api_key_env from config)
 PROVIDER_ENV_VARS = {
     'claude': 'ANTHROPIC_API_KEY',
-    'fireworks': 'FIREWORKS_API_KEY',
     'openai': 'OPENAI_API_KEY',
-    'grok': 'XAI_API_KEY',
-    'featherless': 'FEATHERLESS_API_KEY',
     'gemini': 'GOOGLE_API_KEY',
-    'anthropic': 'ANTHROPIC_COMPAT_API_KEY',
-    # 'other' has no standard env var - fully manual
 }
+
+
+def _get_env_var_for_provider(provider: str) -> str:
+    """Get env var name for a provider — checks static map, then provider config."""
+    if provider in PROVIDER_ENV_VARS:
+        return PROVIDER_ENV_VARS[provider]
+    # Check custom provider config for api_key_env
+    try:
+        from core.settings_manager import settings
+        custom = settings.get('LLM_CUSTOM_PROVIDERS', {})
+        config = custom.get(provider, {})
+        return config.get('api_key_env', '')
+    except ImportError:
+        return ''
 
 
 class CredentialsManager:
@@ -455,14 +463,14 @@ class CredentialsManager:
         if stored_key:
             return stored_key
         
-        # Fall back to environment variable
-        env_var = PROVIDER_ENV_VARS.get(provider, '')
+        # Fall back to environment variable (static + dynamic lookup)
+        env_var = _get_env_var_for_provider(provider)
         if env_var:
             env_value = os.environ.get(env_var, '')
             if env_value and env_value.strip():
                 logger.debug(f"Using API key from env var {env_var} for {provider}")
                 return env_value
-        
+
         return ''
     
     def _get_stored_api_key(self, provider: str) -> str:
@@ -477,7 +485,7 @@ class CredentialsManager:
     
     def has_env_api_key(self, provider: str) -> bool:
         """Check if provider has a key from environment variable."""
-        env_var = PROVIDER_ENV_VARS.get(provider, '')
+        env_var = _get_env_var_for_provider(provider)
         if env_var:
             return bool(os.environ.get(env_var, '').strip())
         return False
@@ -496,7 +504,7 @@ class CredentialsManager:
     
     def get_env_var_name(self, provider: str) -> str:
         """Get the environment variable name for a provider."""
-        return PROVIDER_ENV_VARS.get(provider, '')
+        return _get_env_var_for_provider(provider)
     
     def set_llm_api_key(self, provider: str, api_key: str) -> bool:
         """Set API key for an LLM provider."""

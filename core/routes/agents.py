@@ -53,7 +53,8 @@ async def agent_providers(_=Depends(require_login)):
     import config as cfg
     from core.chat.llm_providers import PROVIDER_METADATA
     providers = []
-    for key, pconf in getattr(cfg, 'LLM_PROVIDERS', {}).items():
+    all_providers = {**getattr(cfg, 'LLM_PROVIDERS', {}), **getattr(cfg, 'LLM_CUSTOM_PROVIDERS', {})}
+    for key, pconf in all_providers.items():
         if not pconf.get('enabled'):
             continue
         meta = PROVIDER_METADATA.get(key, {})

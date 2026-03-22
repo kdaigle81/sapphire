@@ -129,24 +129,79 @@ class SettingsManager:
             logger.info("No user settings found, using defaults")
             self._user = {}
     
+    def _migrate_providers(self):
+        """Migrate non-core providers from LLM_PROVIDERS to LLM_CUSTOM_PROVIDERS."""
+        if 'LLM_PROVIDERS' not in self._user:
+            return
+        providers = self._user.get('LLM_PROVIDERS', {})
+        custom = self._user.get('LLM_CUSTOM_PROVIDERS', {})
+
+        core_keys = {'claude', 'openai', 'gemini'}
+        template_map = {
+            'fireworks': 'openai', 'openai': 'openai', 'claude': 'claude',
+            'anthropic': 'anthropic', 'responses': 'responses',
+            'gemini': 'gemini',
+        }
+        migrated = False
+
+        for key in list(providers.keys()):
+            if key in core_keys:
+                continue
+            config = providers.pop(key)
+            ptype = config.get('provider', 'openai')
+            config['template'] = template_map.get(ptype, 'openai')
+            config.setdefault('display_name', config.get('display_name', key))
+            # Skip empty/unconfigured slots
+            if key == 'other' and not config.get('base_url'):
+                migrated = True
+                continue
+            if key == 'responses' and not config.get('base_url'):
+                migrated = True
+                continue
+            custom[key] = config
+            migrated = True
+
+        if migrated:
+            self._user['LLM_PROVIDERS'] = providers
+            self._user['LLM_CUSTOM_PROVIDERS'] = custom
+            # Update fallback order — keep all keys
+            logger.info(f"[SETTINGS] Migrated {len(custom)} providers to LLM_CUSTOM_PROVIDERS")
+            self.save()
+
     def _merge_settings(self):
         """Merge defaults with user overrides, deep-merging LLM_PROVIDERS"""
+        # Run migration before merge
+        self._migrate_providers()
+
         self._config = {**self._defaults, **self._user}
 
-        # Deep-merge LLM_PROVIDERS so new provider fields from defaults aren't lost
+        # Deep-merge LLM_PROVIDERS (core) so new provider fields from defaults aren't lost
         if 'LLM_PROVIDERS' in self._defaults and 'LLM_PROVIDERS' in self._user:
             merged_providers = {}
             for key, default_config in self._defaults['LLM_PROVIDERS'].items():
                 if key in self._user['LLM_PROVIDERS']:
-                    # Merge: defaults first, then user overrides
                     merged_providers[key] = {**default_config, **self._user['LLM_PROVIDERS'][key]}
                 else:
                     merged_providers[key] = default_config
-            # Include any user-added providers not in defaults
+            # Include any user-added core providers not in defaults (shouldn't happen but safe)
             for key, user_config in self._user['LLM_PROVIDERS'].items():
                 if key not in merged_providers:
                     merged_providers[key] = user_config
             self._config['LLM_PROVIDERS'] = merged_providers
+
+        # Deep-merge LLM_CUSTOM_PROVIDERS — defaults + user
+        default_custom = self._defaults.get('LLM_CUSTOM_PROVIDERS', {})
+        user_custom = self._user.get('LLM_CUSTOM_PROVIDERS', {})
+        merged_custom = {}
+        for key, default_config in default_custom.items():
+            if key in user_custom:
+                merged_custom[key] = {**default_config, **user_custom[key]}
+            else:
+                merged_custom[key] = default_config
+        for key, user_config in user_custom.items():
+            if key not in merged_custom:
+                merged_custom[key] = user_config
+        self._config['LLM_CUSTOM_PROVIDERS'] = merged_custom
 
         # Deep-merge MODEL_GENERATION_PROFILES so new model profiles from defaults aren't lost
         if 'MODEL_GENERATION_PROFILES' in self._defaults and 'MODEL_GENERATION_PROFILES' in self._user:

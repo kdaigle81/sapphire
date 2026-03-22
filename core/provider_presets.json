@@ -1,0 +1,118 @@
+{
+  "_comment": "Curated presets for common providers. These pre-fill the Add Provider form. Not providers themselves.",
+  "presets": {
+    "lmstudio": {
+      "template": "openai",
+      "display_name": "LM Studio",
+      "base_url": "http://127.0.0.1:1234/v1",
+      "is_local": true,
+      "auto_discover_models": true,
+      "default_timeout": 0.3,
+      "generation_defaults": {"temperature": 0.7, "top_p": 0.9, "max_tokens": 4096}
+    },
+    "ollama": {
+      "template": "openai",
+      "display_name": "Ollama",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "is_local": true,
+      "auto_discover_models": true,
+      "default_timeout": 0.3,
+      "generation_defaults": {"temperature": 0.7, "top_p": 0.9, "max_tokens": 4096}
+    },
+    "fireworks": {
+      "template": "openai",
+      "display_name": "Fireworks",
+      "base_url": "https://api.fireworks.ai/inference/v1",
+      "api_key_env": "FIREWORKS_API_KEY",
+      "suggested_models": [
+        {"id": "accounts/fireworks/models/deepseek-v3p2", "name": "DeepSeek V3.2"},
+        {"id": "accounts/fireworks/models/qwen3-235b-a22b-thinking-2507", "name": "Qwen3 235B Thinking"},
+        {"id": "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct", "name": "Qwen3 Coder 480B"},
+        {"id": "accounts/fireworks/models/kimi-k2-thinking", "name": "Kimi K2 Thinking"},
+        {"id": "accounts/fireworks/models/glm-5", "name": "GLM 5"},
+        {"id": "accounts/fireworks/models/glm-4p7", "name": "GLM 4.7"},
+        {"id": "accounts/fireworks/models/minimax-m2p5", "name": "MiniMax M2.5"},
+        {"id": "accounts/fireworks/models/qwen3p5-397b-a17b", "name": "Qwen3.5 397B"}
+      ],
+      "config_hints": {"session_affinity": true},
+      "generation_defaults": {"temperature": 0.75, "top_p": 0.9, "max_tokens": 8192}
+    },
+    "featherless": {
+      "template": "openai",
+      "display_name": "Featherless",
+      "base_url": "https://api.featherless.ai/v1",
+      "api_key_env": "FEATHERLESS_API_KEY",
+      "suggested_models": [
+        {"id": "deepseek-ai/DeepSeek-V3.2", "name": "DeepSeek V3.2"},
+        {"id": "zai-org/GLM-5", "name": "GLM 5 (744B)"},
+        {"id": "Qwen/Qwen3.5-397B-A17B", "name": "Qwen 3.5 (397B)"},
+        {"id": "MiniMaxAI/MiniMax-M2.5", "name": "MiniMax M2.5"},
+        {"id": "moonshotai/Kimi-K2.5", "name": "Kimi K2.5"},
+        {"id": "meta-llama/Llama-3.3-70B-Instruct", "name": "Llama 3.3 70B"}
+      ],
+      "generation_defaults": {"temperature": 0.75, "top_p": 0.9, "max_tokens": 4096}
+    },
+    "openrouter": {
+      "template": "openai",
+      "display_name": "OpenRouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "suggested_models": [
+        {"id": "anthropic/claude-sonnet-4", "name": "Claude Sonnet 4"},
+        {"id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
+        {"id": "deepseek/deepseek-r1", "name": "DeepSeek R1"},
+        {"id": "meta-llama/llama-3.3-70b-instruct", "name": "Llama 3.3 70B"}
+      ],
+      "generation_defaults": {"temperature": 0.7, "top_p": 0.9, "max_tokens": 4096}
+    },
+    "grok": {
+      "template": "openai",
+      "display_name": "Grok (xAI)",
+      "base_url": "https://api.x.ai/v1",
+      "api_key_env": "XAI_API_KEY",
+      "suggested_models": [
+        {"id": "grok-4-1-fast-reasoning", "name": "Grok 4.1 Fast Reasoning"},
+        {"id": "grok-4-1-fast-non-reasoning", "name": "Grok 4.1 Fast"},
+        {"id": "grok-3", "name": "Grok 3"},
+        {"id": "grok-3-mini", "name": "Grok 3 Mini"}
+      ],
+      "config_hints": {"strip_penalties": true},
+      "generation_defaults": {"temperature": 0.7, "top_p": 0.9, "max_tokens": 4096}
+    },
+    "minimax": {
+      "template": "anthropic",
+      "display_name": "MiniMax",
+      "base_url": "https://api.minimax.io/anthropic",
+      "api_key_env": "ANTHROPIC_COMPAT_API_KEY",
+      "suggested_models": [
+        {"id": "MiniMax-M2.7", "name": "MiniMax M2.7"},
+        {"id": "MiniMax-M2.5", "name": "MiniMax M2.5"},
+        {"id": "MiniMax-M2.1", "name": "MiniMax M2.1"}
+      ],
+      "generation_defaults": {"temperature": 0.7, "top_p": 0.9, "max_tokens": 4096}
+    },
+    "together": {
+      "template": "openai",
+      "display_name": "Together AI",
+      "base_url": "https://api.together.xyz/v1",
+      "api_key_env": "TOGETHER_API_KEY",
+      "suggested_models": [
+        {"id": "meta-llama/Llama-3.3-70B-Instruct-Turbo", "name": "Llama 3.3 70B Turbo"},
+        {"id": "deepseek-ai/DeepSeek-V3", "name": "DeepSeek V3"},
+        {"id": "Qwen/Qwen2.5-72B-Instruct-Turbo", "name": "Qwen 2.5 72B Turbo"}
+      ],
+      "generation_defaults": {"temperature": 0.7, "top_p": 0.9, "max_tokens": 4096}
+    },
+    "groq": {
+      "template": "openai",
+      "display_name": "Groq",
+      "base_url": "https://api.groq.com/openai/v1",
+      "api_key_env": "GROQ_API_KEY",
+      "suggested_models": [
+        {"id": "llama-3.3-70b-versatile", "name": "Llama 3.3 70B"},
+        {"id": "gemma2-9b-it", "name": "Gemma 2 9B"}
+      ],
+      "generation_defaults": {"temperature": 0.7, "top_p": 0.9, "max_tokens": 4096}
+    }
+  }
+}

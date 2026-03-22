@@ -164,7 +164,23 @@ class OpenAICompatProvider(BaseProvider):
                     pass
 
             return False
-    
+
+    def list_models(self) -> Optional[list]:
+        """Discover available models via /v1/models endpoint."""
+        try:
+            response = self._client.models.list(timeout=self.health_check_timeout)
+            models = []
+            for m in response.data:
+                models.append({
+                    'id': m.id,
+                    'name': getattr(m, 'name', m.id) or m.id,
+                })
+            models.sort(key=lambda x: x['name'].lower())
+            return models
+        except Exception as e:
+            logger.debug(f"Model discovery failed for {self.base_url}: {e}")
+            return None
+
     def _transform_params_for_model(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Transform generation params for model compatibility.
         
@@ -191,9 +207,10 @@ class OpenAICompatProvider(BaseProvider):
             model_lower.startswith('o3')
         )
 
-        # Detect Grok models (don't support penalty params or stop)
+        # Detect models that don't support penalty params (Grok, etc.)
         is_grok = (
-            model_lower.startswith('grok-')
+            model_lower.startswith('grok-') or
+            self.config.get('strip_penalties', False)
         )
 
         if is_reasoning_model:

@@ -1,24 +1,26 @@
 # llm_providers/__init__.py
 """
-Multi-provider LLM abstraction layer.
+Provider registry — manages core providers, user instances, and plugin providers.
 
-Supports:
-- lmstudio: LM Studio (local, no API key needed)
-- claude: Anthropic Claude API
-- fireworks: Fireworks.ai 
-- openai: OpenAI (auto-selects Completions vs Responses based on model)
-- responses: Generic Responses API (Open Responses standard)
+Three layers:
+1. Core: Claude, OpenAI, Gemini — dedicated classes, custom behavior
+2. Custom: User-created instances from templates (OpenAI/Anthropic/Responses compat)
+3. Plugin: Plugin-registered custom provider classes
 
 Usage:
-    from llm_providers import get_provider_by_key, get_available_providers
-    
+    from core.chat.llm_providers import provider_registry
+    provider = provider_registry.get_provider_by_key('claude')
+
+    # Backward compat still works:
+    from core.chat.llm_providers import get_provider_by_key
     provider = get_provider_by_key('claude', config.LLM_PROVIDERS)
-    response = provider.chat_completion(messages, tools, params)
 """
 
-import os
+import json
 import logging
-from typing import Dict, Any, Optional, List
+import os
+from pathlib import Path
+from typing import Dict, Any, Optional, List, Callable
 
 from .base import BaseProvider, LLMResponse, ToolCall
 from .openai_compat import OpenAICompatProvider
@@ -29,484 +31,552 @@ from .anthropic_compat import AnthropicCompatProvider
 
 logger = logging.getLogger(__name__)
 
-# Provider class registry
-PROVIDER_CLASSES = {
-    'openai': OpenAICompatProvider,  # Will be overridden by auto-select logic
-    'openai_responses': OpenAIResponsesProvider,
-    'responses': OpenAIResponsesProvider,  # Generic Responses API
-    'fireworks': OpenAICompatProvider,
-    'claude': ClaudeProvider,
-    'anthropic': AnthropicCompatProvider,
-    'gemini': GeminiProvider,
-}
-
-# Provider metadata for UI rendering
-PROVIDER_METADATA = {
-    'lmstudio': {
-        'display_name': 'LM Studio',
-        'provider_class': 'openai',
-        'required_fields': ['base_url'],
-        'optional_fields': ['timeout'],
-        'model_options': None,  # No model selection for LM Studio
-        'is_local': True,
-        'privacy_check_whitelist': True,
-        'default_timeout': 0.3,
-    },
-    'claude': {
-        'display_name': 'Claude',
-        'provider_class': 'claude',
-        'required_fields': ['api_key', 'model'],
-        'optional_fields': ['timeout'],
-        'model_options': {
-            'claude-opus-4-6': 'Opus 4.6',
-            'claude-sonnet-4-6': 'Sonnet 4.6',
-            'claude-sonnet-4-5': 'Sonnet 4.5',
-            'claude-haiku-4-5': 'Haiku 4.5',
-            'claude-opus-4-5': 'Opus 4.5',
-        },
-        'is_local': False,
-        'default_timeout': 10.0,
-        'api_key_env': 'ANTHROPIC_API_KEY',
-    },
-    'fireworks': {
-        'display_name': 'Fireworks',
-        'provider_class': 'fireworks',
-        'required_fields': ['base_url', 'api_key', 'model'],
-        'optional_fields': ['timeout'],
-        'model_options': {
-            'accounts/fireworks/models/qwen3-235b-a22b-thinking-2507': 'Qwen3 235B Thinking',
-            'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct': 'Qwen3 Coder 480B',
-            'accounts/fireworks/models/kimi-k2-thinking': 'Kimi K2 Thinking',
-            'accounts/fireworks/models/qwq-32b': 'QwQ 32B',
-            'accounts/fireworks/models/gpt-oss-120b': 'GPT-OSS 120B',
-            'accounts/fireworks/models/deepseek-v3p2': 'DeepSeek V3.2',
-            'accounts/fireworks/models/qwen3-vl-235b-a22b-thinking': 'Qwen3 VL 235B Thinking',
-            'accounts/fireworks/models/glm-5': 'GLM 5',
-            'accounts/fireworks/models/glm-4p7': 'GLM 4.7',
-            'accounts/fireworks/models/minimax-m2p5': 'MiniMax M2.5',
-            'accounts/fireworks/models/kimi-k2p5': 'Kimi K2.5',
-            'accounts/fireworks/models/qwen3p5-397b-a17b': 'Qwen3.5 397B',
-        },
-        'is_local': False,
-        'default_timeout': 10.0,
-        'api_key_env': 'FIREWORKS_API_KEY',
-    },
-    'openai': {
-        'display_name': 'OpenAI',
-        'provider_class': 'openai',  # Auto-selects completions vs responses
-        'required_fields': ['base_url', 'api_key', 'model'],
-        'optional_fields': ['timeout', 'reasoning_effort'],
-        'model_options': {
-            'gpt-5.2': 'GPT-5.2 (Flagship)',
-            'gpt-5.1': 'GPT-5.1',
-            'gpt-5-mini': 'GPT-5 Mini',
-            'gpt-4o': 'GPT-4o (Legacy)',
-            'gpt-4o-mini': 'GPT-4o Mini (Legacy)',
-        },
-        'is_local': False,
-        'default_timeout': 10.0,
-        'api_key_env': 'OPENAI_API_KEY',
-        'supports_reasoning': True,  # Flag for UI to show reasoning options
-    },
-    'responses': {
-        'display_name': 'Responses API (Generic)',
-        'provider_class': 'responses',
-        'required_fields': ['base_url', 'api_key', 'model'],
-        'optional_fields': ['timeout', 'reasoning_effort', 'reasoning_summary'],
-        'model_options': None,  # Free-form model entry
-        'is_local': False,
-        'privacy_check_whitelist': True,
-        'default_timeout': 10.0,
-        'supports_reasoning': True,
-        'description': 'Generic Responses API endpoint (Open Responses standard)',
-    },
-    'grok': {
-        'display_name': 'Grok (xAI)',
-        'provider_class': 'openai',
-        'required_fields': ['base_url', 'api_key', 'model'],
-        'optional_fields': ['timeout'],
-        'model_options': {
-            'grok-4-1-fast-reasoning': 'Grok 4.1 Fast Reasoning',
-            'grok-4-1-fast-non-reasoning': 'Grok 4.1 Fast',
-            'grok-code-fast-1': 'Grok Code Fast',
-            'grok-3': 'Grok 3',
-            'grok-3-mini': 'Grok 3 Mini',
-        },
-        'is_local': False,
-        'default_timeout': 10.0,
-        'api_key_env': 'XAI_API_KEY',
-    },
-    'featherless': {
-        'display_name': 'Featherless',
-        'provider_class': 'openai',
-        'required_fields': ['base_url', 'api_key', 'model'],
-        'optional_fields': ['timeout'],
-        'model_options': {
-            'zai-org/GLM-5': 'GLM 5 (744B)',
-            'zai-org/GLM-4.7': 'GLM 4.7',
-            'deepseek-ai/DeepSeek-V3.2': 'DeepSeek V3.2',
-            'deepseek-ai/DeepSeek-V3.2-Speciale': 'DeepSeek V3.2 Speciale',
-            'Qwen/Qwen3.5-397B-A17B': 'Qwen 3.5 (397B)',
-            'Qwen/Qwen3-32B': 'Qwen 3 32B',
-            'openai/gpt-oss-120b': 'GPT-OSS 120B',
-            'openai/gpt-oss-20b': 'GPT-OSS 20B',
-            'moonshotai/Kimi-K2.5': 'Kimi K2.5',
-            'meta-llama/Llama-3.3-70B-Instruct': 'Llama 3.3 70B',
-            'google/gemma-3-27b-it': 'Gemma 3 27B',
-            'MiniMaxAI/MiniMax-M2.5': 'MiniMax M2.5',
-            'mistralai/Mistral-Small-3.2-24B-Instruct-2506': 'Mistral 3.2 Small 24B',
-            'XiaomiMiMo/MiMo-V2-Flash': 'MiMo V2 Flash',
-            'featherless-ai/QRWKV-72B': 'QRWKV 72B',
-            'Nanbeige/Nanbeige4.1-3B': 'Nanbeige 4.1 3B',
-            'stepfun-ai/Step-3.5-Flash': 'Step 3.5 Flash',
-        },
-        'is_local': False,
-        'default_timeout': 10.0,
-        'api_key_env': 'FEATHERLESS_API_KEY',
-    },
-    'gemini': {
-        'display_name': 'Gemini',
-        'provider_class': 'gemini',
-        'required_fields': ['api_key', 'model'],
-        'optional_fields': ['timeout', 'reasoning_effort'],
-        'model_options': {
-            'gemini-2.5-flash': 'Gemini 2.5 Flash (Thinking)',
-            'gemini-2.5-pro': 'Gemini 2.5 Pro (Thinking)',
-            'gemini-2.0-flash': 'Gemini 2.0 Flash',
-            'gemini-2.0-flash-lite': 'Gemini 2.0 Flash Lite',
-        },
-        'is_local': False,
-        'default_timeout': 10.0,
-        'api_key_env': 'GOOGLE_API_KEY',
-        'supports_reasoning': True,
-    },
-    'anthropic': {
-        'display_name': 'Anthropic Compatible',
-        'provider_class': 'anthropic',
-        'required_fields': ['base_url', 'api_key', 'model'],
-        'optional_fields': ['timeout'],
-        'model_options': {
-            'MiniMax-M2.7': 'MiniMax M2.7',
-            'MiniMax-M2.7-highspeed': 'MiniMax M2.7 Highspeed',
-            'MiniMax-M2.5': 'MiniMax M2.5',
-            'MiniMax-M2.5-highspeed': 'MiniMax M2.5 Highspeed',
-            'MiniMax-M2.1': 'MiniMax M2.1',
-            'MiniMax-M2.1-highspeed': 'MiniMax M2.1 Highspeed',
-        },
-        'is_local': False,
-        'default_timeout': 10.0,
-        'api_key_env': 'ANTHROPIC_COMPAT_API_KEY',
-        'description': 'Anthropic Messages API compatible endpoint (MiniMax, etc.)',
-    },
-    'other': {
-        'display_name': 'Other (OpenAI Compatible)',
-        'provider_class': 'openai',
-        'required_fields': ['base_url', 'api_key', 'model'],
-        'optional_fields': ['timeout'],
-        'model_options': None,  # Free-form model entry
-        'is_local': False,
-        'privacy_check_whitelist': True,
-        'default_timeout': 10.0,
-    },
+# Default generation params for new instances
+DEFAULT_GENERATION_PARAMS = {
+    'temperature': 0.7,
+    'top_p': 0.9,
+    'max_tokens': 4096,
+    'presence_penalty': 0.1,
+    'frequency_penalty': 0.1,
 }
 
 
-def get_api_key(provider_config: Dict[str, Any], provider_key: str) -> str:
+class ProviderRegistry:
     """
-    Get API key for a provider.
-    
-    Delegates to credentials_manager which handles:
-    1. Stored credential in credentials.json (priority)
-    2. Environment variable fallback
-    
-    Also checks explicit api_key in provider_config for backwards compatibility.
+    Central registry for all LLM providers.
+
+    Manages core providers (Claude, OpenAI, Gemini), user-created custom
+    instances (from templates), and plugin-registered provider classes.
     """
-    # Check credentials_manager (handles stored + env logic)
-    try:
-        from core.credentials_manager import credentials
-        key = credentials.get_llm_api_key(provider_key)
-        if key:
-            return key
-    except ImportError:
-        pass
-    
-    # Backwards compat: check explicit config value
-    explicit_key = provider_config.get('api_key', '')
-    if explicit_key and explicit_key.strip():
-        return explicit_key
-    
-    # Local providers don't need keys
-    metadata = PROVIDER_METADATA.get(provider_key, {})
-    if metadata.get('is_local', False):
-        return 'not-needed'
-    
-    return ''
 
+    def __init__(self):
+        # Template classes: type_key -> provider class
+        self._classes: Dict[str, type] = {
+            'openai': OpenAICompatProvider,
+            'openai_responses': OpenAIResponsesProvider,
+            'claude': ClaudeProvider,
+            'anthropic': AnthropicCompatProvider,
+            'gemini': GeminiProvider,
+        }
 
-def get_generation_params(provider_key: str, model: str, providers_config: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Get generation parameters for a model.
-    
-    Resolution order:
-    1. Provider-specific generation_params (for custom/other models)
-    2. MODEL_GENERATION_PROFILES lookup by model name
-    3. Fallback profile (__fallback__)
-    
-    Args:
-        provider_key: The provider key (e.g., 'claude', 'other')
-        model: The model name string
-        providers_config: The LLM_PROVIDERS dict
-    
-    Returns:
-        Dict with temperature, top_p, max_tokens, presence_penalty, frequency_penalty
-    """
-    import config as app_config
-    
-    default_params = {
-        'temperature': 0.7,
-        'top_p': 0.9,
-        'max_tokens': 4096,
-        'presence_penalty': 0.1,
-        'frequency_penalty': 0.1
-    }
-    
-    # 1. Check provider-specific generation_params (for Other/custom models)
-    provider_config = providers_config.get(provider_key, {})
-    if provider_config.get('generation_params'):
-        params = provider_config['generation_params']
-        if params:
-            logger.debug(f"Using provider-specific generation_params for {provider_key}")
-            return {**default_params, **params}
-    
-    # 2. Look up MODEL_GENERATION_PROFILES
-    profiles = getattr(app_config, 'MODEL_GENERATION_PROFILES', {})
-    if model and model in profiles:
-        logger.debug(f"Using generation profile for model '{model}'")
-        return {**default_params, **profiles[model]}
-    
-    # 3. Fallback profile
-    if '__fallback__' in profiles:
-        logger.debug(f"Using __fallback__ generation profile for '{model}'")
-        return {**default_params, **profiles['__fallback__']}
-    
-    # 4. Ultimate fallback - return defaults
-    logger.debug(f"Using hardcoded default generation params for '{model}'")
-    return default_params
+        # Core provider metadata (fixed, ships with Sapphire)
+        self._core_providers: Dict[str, dict] = {
+            'claude': {
+                'display_name': 'Claude',
+                'provider_class': 'claude',
+                'required_fields': ['api_key', 'model'],
+                'optional_fields': ['timeout'],
+                'model_options': {
+                    'claude-opus-4-6': 'Opus 4.6',
+                    'claude-sonnet-4-6': 'Sonnet 4.6',
+                    'claude-sonnet-4-5': 'Sonnet 4.5',
+                    'claude-haiku-4-5': 'Haiku 4.5',
+                    'claude-opus-4-5': 'Opus 4.5',
+                },
+                'is_local': False,
+                'default_timeout': 10.0,
+                'api_key_env': 'ANTHROPIC_API_KEY',
+            },
+            'openai': {
+                'display_name': 'OpenAI',
+                'provider_class': 'openai',
+                'required_fields': ['base_url', 'api_key', 'model'],
+                'optional_fields': ['timeout', 'reasoning_effort'],
+                'model_options': {
+                    'gpt-5.2': 'GPT-5.2 (Flagship)',
+                    'gpt-5.1': 'GPT-5.1',
+                    'gpt-5-mini': 'GPT-5 Mini',
+                    'gpt-4o': 'GPT-4o (Legacy)',
+                    'gpt-4o-mini': 'GPT-4o Mini (Legacy)',
+                },
+                'is_local': False,
+                'default_timeout': 10.0,
+                'api_key_env': 'OPENAI_API_KEY',
+                'supports_reasoning': True,
+            },
+            'gemini': {
+                'display_name': 'Gemini',
+                'provider_class': 'gemini',
+                'required_fields': ['api_key', 'model'],
+                'optional_fields': ['timeout', 'reasoning_effort'],
+                'model_options': {
+                    'gemini-2.5-flash': 'Gemini 2.5 Flash (Thinking)',
+                    'gemini-2.5-pro': 'Gemini 2.5 Pro (Thinking)',
+                    'gemini-2.0-flash': 'Gemini 2.0 Flash',
+                    'gemini-2.0-flash-lite': 'Gemini 2.0 Flash Lite',
+                },
+                'is_local': False,
+                'default_timeout': 10.0,
+                'api_key_env': 'GOOGLE_API_KEY',
+                'supports_reasoning': True,
+            },
+        }
 
+        # Plugin-registered classes: type_key -> {class, display_name, plugin_name, ...}
+        self._plugin_classes: Dict[str, dict] = {}
 
-def get_provider_by_key(
-    provider_key: str,
-    providers_config: Dict[str, Dict[str, Any]],
-    request_timeout: float = 240.0,
-    model_override: str = ''
-) -> Optional[BaseProvider]:
-    """
-    Create provider instance by key from LLM_PROVIDERS config.
+        # Cached presets
+        self._presets: Optional[dict] = None
 
-    For OpenAI provider, auto-selects between Chat Completions and Responses API
-    based on model (gpt-5.x uses Responses API for reasoning summaries).
+    # =========================================================================
+    # CLASS REGISTRATION (for plugins)
+    # =========================================================================
 
-    Args:
-        provider_key: Key in LLM_PROVIDERS (e.g., 'claude', 'lmstudio')
-        providers_config: The LLM_PROVIDERS dict from settings
-        request_timeout: Overall request timeout
-        model_override: Per-chat model override (takes priority for provider selection)
+    def register_plugin_provider(self, type_key: str, display_name: str,
+                                  provider_class: type, plugin_name: str,
+                                  required_fields: list = None,
+                                  model_options: list = None):
+        """Register a custom provider class from a plugin."""
+        self._classes[type_key] = provider_class
+        self._plugin_classes[type_key] = {
+            'class': provider_class,
+            'display_name': display_name,
+            'plugin_name': plugin_name,
+            'required_fields': required_fields or ['base_url', 'api_key', 'model'],
+            'model_options': model_options,
+        }
+        logger.info(f"Plugin provider registered: {type_key} ({display_name}) from {plugin_name}")
 
-    Returns:
-        Provider instance or None if disabled/error
-    """
-    if provider_key not in providers_config:
-        logger.error(f"Unknown provider key: {provider_key}")
-        return None
-    
-    config = providers_config[provider_key]
-    
-    if not config.get('enabled', False):
-        logger.debug(f"Provider '{provider_key}' is disabled")
-        return None
-    
-    # Determine provider class
-    provider_type = config.get('provider', 'openai')
-    model = model_override or config.get('model', '')
+    def unregister_plugin_providers(self, plugin_name: str):
+        """Remove all provider classes from a plugin."""
+        to_remove = [k for k, v in self._plugin_classes.items() if v['plugin_name'] == plugin_name]
+        for key in to_remove:
+            self._plugin_classes.pop(key, None)
+            self._classes.pop(key, None)
+            logger.info(f"Plugin provider unregistered: {key}")
 
-    # Auto-select Responses API for OpenAI reasoning models
-    if provider_type == 'openai' and OpenAIResponsesProvider.should_use_responses_api(model):
-        provider_type = 'openai_responses'
-        logger.info(f"[AUTO-SELECT] Using Responses API for model '{model}'")
-    
-    if provider_type not in PROVIDER_CLASSES:
-        logger.error(f"Unknown provider type: {provider_type}")
-        return None
-    
-    provider_class = PROVIDER_CLASSES[provider_type]
-    
-    # Build config for provider init
-    api_key = get_api_key(config, provider_key)
-    
-    llm_config = {
-        'provider': provider_type,
-        'base_url': config.get('base_url', ''),
-        'api_key': api_key,
-        'model': model,
-        'timeout': config.get('timeout', PROVIDER_METADATA.get(provider_key, {}).get('default_timeout', 5.0)),
-        'enabled': True,
-        # Claude-specific settings
-        'thinking_enabled': config.get('thinking_enabled'),
-        'thinking_budget': config.get('thinking_budget'),
-        'cache_enabled': config.get('cache_enabled', False),
-        'cache_ttl': config.get('cache_ttl', '5m'),
-        # Responses API / reasoning settings
-        'reasoning_effort': config.get('reasoning_effort', 'medium'),
-        'reasoning_summary': config.get('reasoning_summary', 'auto'),
-    }
-    
-    try:
-        provider = provider_class(llm_config, request_timeout)
-        logger.info(f"Created provider '{provider_key}' [{provider_type}]")
-        return provider
-    except Exception as e:
-        logger.error(f"Failed to create provider '{provider_key}': {e}")
-        return None
+    # =========================================================================
+    # PROVIDER CREATION
+    # =========================================================================
 
+    def get_provider_by_key(self, provider_key: str,
+                             providers_config: Dict[str, Dict[str, Any]] = None,
+                             request_timeout: float = 240.0,
+                             model_override: str = '') -> Optional[BaseProvider]:
+        """
+        Create provider instance by key.
 
-def get_first_available_provider(
-    providers_config: Dict[str, Dict[str, Any]],
-    fallback_order: List[str],
-    request_timeout: float = 240.0,
-    exclude: Optional[List[str]] = None,
-    force_privacy: bool = False
-) -> Optional[tuple]:
-    """
-    Get first available provider following fallback order.
-    
-    Only considers providers with use_as_fallback=True (default).
-    Providers with use_as_fallback=False are excluded from Auto mode
-    and can only be used when explicitly selected per-chat.
-    
-    Args:
-        providers_config: The LLM_PROVIDERS dict
-        fallback_order: List of provider keys in priority order
-        request_timeout: Overall request timeout
-        exclude: Provider keys to skip
-    
-    Returns:
-        Tuple of (provider_key, provider_instance) or None
-    """
-    exclude = exclude or []
-    
-    for provider_key in fallback_order:
-        if provider_key in exclude:
-            continue
-        
+        Checks core providers (LLM_PROVIDERS) and custom providers (LLM_CUSTOM_PROVIDERS).
+        """
+        if providers_config is None:
+            providers_config = self._get_all_configs()
+
         if provider_key not in providers_config:
-            continue
-        
-        config = providers_config[provider_key]
-        
-        if not config.get('enabled', False):
-            continue
-        
-        # Skip providers not in Auto fallback pool
-        if not config.get('use_as_fallback', True):
-            logger.debug(f"Provider '{provider_key}' excluded from Auto mode (use_as_fallback=False)")
-            continue
+            logger.error(f"Unknown provider key: {provider_key}")
+            return None
 
-        # Privacy mode: only allow local/whitelisted providers
+        config = providers_config[provider_key]
+
+        if not config.get('enabled', False):
+            logger.debug(f"Provider '{provider_key}' is disabled")
+            return None
+
+        # Determine provider class — template (custom) or provider (core)
+        provider_type = config.get('template') or config.get('provider', 'openai')
+        model = model_override or config.get('model', '')
+
+        # Auto-select Responses API for OpenAI reasoning models
+        if provider_type == 'openai' and OpenAIResponsesProvider.should_use_responses_api(model):
+            provider_type = 'openai_responses'
+            logger.info(f"[AUTO-SELECT] Using Responses API for model '{model}'")
+
+        if provider_type not in self._classes:
+            logger.error(f"Unknown provider type: {provider_type}")
+            return None
+
+        provider_class = self._classes[provider_type]
+
+        # Build config for provider init
+        api_key = self.get_api_key(provider_key, config)
+
+        # Resolve timeout: config -> core metadata -> preset -> 5.0
+        default_timeout = self._core_providers.get(provider_key, {}).get('default_timeout', 5.0)
+        if config.get('is_local'):
+            default_timeout = 0.3
+
+        llm_config = {
+            'provider': provider_type,
+            'base_url': config.get('base_url', ''),
+            'api_key': api_key,
+            'model': model,
+            'timeout': config.get('timeout', default_timeout),
+            'enabled': True,
+            # Claude-specific
+            'thinking_enabled': config.get('thinking_enabled'),
+            'thinking_budget': config.get('thinking_budget'),
+            'cache_enabled': config.get('cache_enabled', False),
+            'cache_ttl': config.get('cache_ttl', '5m'),
+            # Responses API / reasoning
+            'reasoning_effort': config.get('reasoning_effort', 'medium'),
+            'reasoning_summary': config.get('reasoning_summary', 'auto'),
+            # Config hints from presets
+            'session_affinity': config.get('session_affinity', False),
+            'strip_penalties': config.get('strip_penalties', False),
+        }
+
         try:
-            from core.privacy import is_privacy_mode, is_allowed_endpoint
-            if is_privacy_mode() or force_privacy:
-                metadata = PROVIDER_METADATA.get(provider_key, {})
-                if metadata.get('privacy_check_whitelist'):
-                    base_url = config.get('base_url', '')
-                    if not is_allowed_endpoint(base_url):
-                        logger.debug(f"Provider '{provider_key}' excluded in privacy mode (base_url not in whitelist)")
+            provider = provider_class(llm_config, request_timeout)
+            logger.info(f"Created provider '{provider_key}' [{provider_type}]")
+            return provider
+        except Exception as e:
+            logger.error(f"Failed to create provider '{provider_key}': {e}")
+            return None
+
+    # =========================================================================
+    # PROVIDER LISTING (for UI)
+    # =========================================================================
+
+    def get_all_providers(self, providers_config: Dict[str, Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Return merged list of all providers for UI rendering."""
+        if providers_config is None:
+            providers_config = self._get_all_configs()
+
+        result = []
+        for key, config in providers_config.items():
+            is_core = key in self._core_providers
+            metadata = self._core_providers.get(key, {})
+
+            api_key = self.get_api_key(key, config)
+            has_api_key = bool(api_key and api_key != 'not-needed')
+            needs_api_key = 'api_key' in metadata.get('required_fields', config.get('required_fields', []))
+
+            # Key source info
+            try:
+                from core.credentials_manager import credentials
+                has_config_key = credentials.has_stored_api_key(key)
+                has_env_key = credentials.has_env_api_key(key)
+                env_var = credentials.get_env_var_name(key)
+            except (ImportError, AttributeError):
+                has_config_key = False
+                has_env_key = bool(config.get('api_key_env') and os.environ.get(config.get('api_key_env', ''), '').strip())
+                env_var = config.get('api_key_env', metadata.get('api_key_env', ''))
+
+            result.append({
+                'key': key,
+                'display_name': config.get('display_name', metadata.get('display_name', key)),
+                'enabled': config.get('enabled', False),
+                'has_api_key': has_api_key or not needs_api_key,
+                'is_local': config.get('is_local', metadata.get('is_local', False)),
+                'is_core': is_core,
+                'template': config.get('template', config.get('provider', '')),
+                'model': config.get('model', ''),
+                'model_options': metadata.get('model_options') if is_core else None,
+                'suggested_models': config.get('suggested_models'),
+                'has_config_key': has_config_key,
+                'has_env_key': has_env_key,
+                'env_var': env_var,
+                'base_url': config.get('base_url', ''),
+                'supports_reasoning': metadata.get('supports_reasoning', False),
+                'generation_params': config.get('generation_params'),
+            })
+
+        return result
+
+    def get_core_keys(self) -> list:
+        """Return list of core provider keys."""
+        return list(self._core_providers.keys())
+
+    def get_metadata(self, provider_key: str) -> Dict[str, Any]:
+        """Get metadata for a specific provider (core only)."""
+        return self._core_providers.get(provider_key, {})
+
+    # =========================================================================
+    # FALLBACK / AUTO MODE
+    # =========================================================================
+
+    def get_first_available_provider(self,
+                                      providers_config: Dict[str, Dict[str, Any]],
+                                      fallback_order: List[str],
+                                      request_timeout: float = 240.0,
+                                      exclude: Optional[List[str]] = None,
+                                      force_privacy: bool = False) -> Optional[tuple]:
+        """Get first available provider following fallback order."""
+        exclude = exclude or []
+
+        for provider_key in fallback_order:
+            if provider_key in exclude:
+                continue
+
+            if provider_key not in providers_config:
+                continue
+
+            config = providers_config[provider_key]
+
+            if not config.get('enabled', False):
+                continue
+
+            if not config.get('use_as_fallback', True):
+                logger.debug(f"Provider '{provider_key}' excluded from Auto mode (use_as_fallback=False)")
+                continue
+
+            # Privacy mode
+            try:
+                from core.privacy import is_privacy_mode, is_allowed_endpoint
+                if is_privacy_mode() or force_privacy:
+                    is_local = config.get('is_local', self._core_providers.get(provider_key, {}).get('is_local', False))
+                    if is_local:
+                        pass  # local is always OK
+                    elif config.get('privacy_check_whitelist', self._core_providers.get(provider_key, {}).get('privacy_check_whitelist')):
+                        base_url = config.get('base_url', '')
+                        if not is_allowed_endpoint(base_url):
+                            logger.debug(f"Provider '{provider_key}' excluded in privacy mode (base_url not in whitelist)")
+                            continue
+                    else:
+                        logger.debug(f"Provider '{provider_key}' excluded in privacy mode (cloud provider)")
                         continue
-                elif not metadata.get('is_local', False):
-                    logger.debug(f"Provider '{provider_key}' excluded in privacy mode (cloud provider)")
-                    continue
+            except ImportError:
+                pass
+
+            provider = self.get_provider_by_key(provider_key, providers_config, request_timeout)
+            if provider:
+                try:
+                    if provider.health_check():
+                        logger.info(f"Selected provider '{provider_key}' (healthy)")
+                        return (provider_key, provider)
+                    else:
+                        logger.debug(f"Provider '{provider_key}' failed health check")
+                except Exception as e:
+                    logger.debug(f"Provider '{provider_key}' health check error: {e}")
+
+        return None
+
+    # =========================================================================
+    # GENERATION PARAMS
+    # =========================================================================
+
+    def get_generation_params(self, provider_key: str, model: str,
+                               providers_config: Dict[str, Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Get generation parameters for a provider instance.
+
+        Resolution:
+        1. Instance generation_params (if set)
+        2. Default params
+        """
+        if providers_config is None:
+            providers_config = self._get_all_configs()
+
+        config = providers_config.get(provider_key, {})
+
+        # Instance-level override
+        if config.get('generation_params'):
+            return {**DEFAULT_GENERATION_PARAMS, **config['generation_params']}
+
+        return dict(DEFAULT_GENERATION_PARAMS)
+
+    # =========================================================================
+    # API KEYS
+    # =========================================================================
+
+    def get_api_key(self, provider_key: str, config: Dict[str, Any] = None) -> str:
+        """
+        Get API key for any provider (core or custom).
+
+        Priority:
+        1. credentials_manager stored key (under provider_key)
+        2. Environment variable (from config.api_key_env or core metadata)
+        3. Explicit api_key in config (backward compat)
+        4. 'not-needed' for local providers
+        """
+        # Stored credential
+        try:
+            from core.credentials_manager import credentials
+            key = credentials.get_llm_api_key(provider_key)
+            if key:
+                return key
         except ImportError:
             pass
 
-        provider = get_provider_by_key(provider_key, providers_config, request_timeout)
-        if provider:
+        # Env var — check config, then core metadata
+        if config is None:
+            config = self._get_all_configs().get(provider_key, {})
+        env_var = config.get('api_key_env') or self._core_providers.get(provider_key, {}).get('api_key_env', '')
+        if env_var:
+            val = os.environ.get(env_var, '')
+            if val and val.strip():
+                logger.debug(f"Using API key from env var {env_var} for {provider_key}")
+                return val
+
+        # Backward compat: explicit config value
+        explicit_key = config.get('api_key', '')
+        if explicit_key and explicit_key.strip():
+            return explicit_key
+
+        # Local providers
+        is_local = config.get('is_local', self._core_providers.get(provider_key, {}).get('is_local', False))
+        if is_local:
+            return 'not-needed'
+
+        return ''
+
+    # =========================================================================
+    # PRESETS
+    # =========================================================================
+
+    def get_presets(self) -> dict:
+        """Load curated presets from provider_presets.json."""
+        if self._presets is None:
+            presets_path = Path(__file__).parent.parent.parent / "provider_presets.json"
             try:
-                if provider.health_check():
-                    logger.info(f"Selected provider '{provider_key}' (healthy)")
-                    return (provider_key, provider)
-                else:
-                    logger.debug(f"Provider '{provider_key}' failed health check")
+                self._presets = json.loads(presets_path.read_text(encoding='utf-8')).get('presets', {})
             except Exception as e:
-                logger.debug(f"Provider '{provider_key}' health check error: {e}")
-    
-    return None
+                logger.warning(f"Could not load provider presets: {e}")
+                self._presets = {}
+        return self._presets
+
+    def get_templates(self) -> list:
+        """Return available template types for '+ Add Provider' UI."""
+        templates = [
+            {'key': 'openai', 'name': 'OpenAI Compatible'},
+            {'key': 'anthropic', 'name': 'Anthropic Compatible'},
+            {'key': 'responses', 'name': 'Responses API'},
+        ]
+        for key, info in self._plugin_classes.items():
+            templates.append({'key': key, 'name': info['display_name']})
+        return templates
+
+    # =========================================================================
+    # MODEL DISCOVERY
+    # =========================================================================
+
+    def discover_models(self, provider_key: str,
+                         providers_config: Dict[str, Dict[str, Any]] = None) -> Optional[list]:
+        """
+        Discover available models from a provider.
+
+        For OpenAI-compat providers, hits /v1/models.
+        Returns list of {"id": str, "name": str} or None.
+        """
+        provider = self.get_provider_by_key(provider_key, providers_config)
+        if not provider:
+            return None
+
+        if hasattr(provider, 'list_models'):
+            try:
+                return provider.list_models()
+            except Exception as e:
+                logger.debug(f"Model discovery failed for {provider_key}: {e}")
+                return None
+
+        return None
+
+    # =========================================================================
+    # CONFIG HELPERS
+    # =========================================================================
+
+    def _get_all_configs(self) -> Dict[str, Dict[str, Any]]:
+        """Merge core and custom provider configs from settings."""
+        try:
+            from core.settings_manager import settings
+            core = settings.get('LLM_PROVIDERS', {})
+            custom = settings.get('LLM_CUSTOM_PROVIDERS', {})
+            return {**core, **custom}
+        except ImportError:
+            return {}
+
+    def is_core_provider(self, key: str) -> bool:
+        return key in self._core_providers
+
+
+# Singleton
+provider_registry = ProviderRegistry()
+
+
+# =============================================================================
+# BACKWARD COMPATIBILITY EXPORTS
+# =============================================================================
+# These functions maintain the old API so chat.py, execution_context.py, etc.
+# don't need immediate changes. They delegate to the registry.
+
+# Legacy dicts — kept as properties that read from registry
+PROVIDER_CLASSES = provider_registry._classes
+
+def _build_legacy_metadata():
+    """Build PROVIDER_METADATA from registry for backward compat."""
+    meta = dict(provider_registry._core_providers)
+    # Add custom providers from settings as metadata entries
+    try:
+        from core.settings_manager import settings
+        custom = settings.get('LLM_CUSTOM_PROVIDERS', {})
+        for key, config in custom.items():
+            meta[key] = {
+                'display_name': config.get('display_name', key),
+                'provider_class': config.get('template', 'openai'),
+                'required_fields': ['base_url', 'api_key', 'model'],
+                'is_local': config.get('is_local', False),
+                'default_timeout': config.get('timeout', 5.0),
+                'api_key_env': config.get('api_key_env', ''),
+                'model_options': None,
+                'privacy_check_whitelist': config.get('is_local', False),
+            }
+    except ImportError:
+        pass
+    return meta
+
+# Lazy property — rebuilt when accessed
+class _MetadataProxy(dict):
+    def __getitem__(self, key):
+        return _build_legacy_metadata()[key]
+    def get(self, key, default=None):
+        return _build_legacy_metadata().get(key, default)
+    def __contains__(self, key):
+        return key in _build_legacy_metadata()
+    def items(self):
+        return _build_legacy_metadata().items()
+    def keys(self):
+        return _build_legacy_metadata().keys()
+    def values(self):
+        return _build_legacy_metadata().values()
+
+PROVIDER_METADATA = _MetadataProxy()
+
+
+def get_api_key(provider_config: Dict[str, Any], provider_key: str) -> str:
+    """Legacy — delegates to registry."""
+    return provider_registry.get_api_key(provider_key, provider_config)
+
+
+def get_generation_params(provider_key: str, model: str,
+                           providers_config: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """Legacy — delegates to registry."""
+    return provider_registry.get_generation_params(provider_key, model, providers_config)
+
+
+def get_provider_by_key(provider_key: str,
+                         providers_config: Dict[str, Dict[str, Any]],
+                         request_timeout: float = 240.0,
+                         model_override: str = '') -> Optional[BaseProvider]:
+    """Legacy — delegates to registry."""
+    return provider_registry.get_provider_by_key(provider_key, providers_config, request_timeout, model_override)
+
+
+def get_first_available_provider(providers_config: Dict[str, Dict[str, Any]],
+                                  fallback_order: List[str],
+                                  request_timeout: float = 240.0,
+                                  exclude: Optional[List[str]] = None,
+                                  force_privacy: bool = False) -> Optional[tuple]:
+    """Legacy — delegates to registry."""
+    return provider_registry.get_first_available_provider(
+        providers_config, fallback_order, request_timeout, exclude, force_privacy)
 
 
 def get_available_providers(providers_config: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Get list of all configured providers with their metadata.
-    Used by UI to render provider options.
-    
-    Returns:
-        List of dicts with key, display_name, enabled, has_api_key, etc.
-    """
-    result = []
-    
-    for key, config in providers_config.items():
-        metadata = PROVIDER_METADATA.get(key, {})
-        
-        # Check if API key is available
-        api_key = get_api_key(config, key)
-        has_api_key = bool(api_key and api_key != 'not-needed')
-        needs_api_key = 'api_key' in metadata.get('required_fields', [])
-        
-        # Key source info for frontend hints
-        try:
-            from core.credentials_manager import credentials
-            has_config_key = credentials.has_stored_api_key(key)
-            has_env_key = credentials.has_env_api_key(key)
-            env_var = credentials.get_env_var_name(key)
-        except ImportError:
-            has_config_key = False
-            has_env_key = False
-            env_var = metadata.get('api_key_env', '')
-
-        result.append({
-            'key': key,
-            'display_name': config.get('display_name', metadata.get('display_name', key)),
-            'enabled': config.get('enabled', False),
-            'has_api_key': has_api_key or not needs_api_key,
-            'is_local': metadata.get('is_local', False),
-            'model': config.get('model', ''),
-            'model_options': metadata.get('model_options'),
-            'has_config_key': has_config_key,
-            'has_env_key': has_env_key,
-            'env_var': env_var,
-        })
-    
-    return result
+    """Legacy — delegates to registry."""
+    return provider_registry.get_all_providers(providers_config)
 
 
 def get_provider_metadata(provider_key: str) -> Dict[str, Any]:
-    """Get metadata for a specific provider."""
-    return PROVIDER_METADATA.get(provider_key, {})
+    """Legacy — delegates to registry."""
+    return provider_registry.get_metadata(provider_key)
 
 
-# Legacy compatibility functions
+# Legacy functions that may still be used
 def get_provider(llm_config: Dict[str, Any], request_timeout: float = 240.0) -> Optional[BaseProvider]:
-    """
-    Legacy function for old LLM_PRIMARY/LLM_FALLBACK config format.
-    Creates provider directly from config dict.
-    """
+    """Legacy — create provider directly from config dict."""
     if not llm_config.get('enabled', False):
         return None
-    
     provider_type = llm_config.get('provider', 'openai')
-    if provider_type not in PROVIDER_CLASSES:
-        # Auto-detect from URL
-        provider_type = get_provider_for_url(llm_config.get('base_url', ''))
-    
-    provider_class = PROVIDER_CLASSES.get(provider_type, OpenAICompatProvider)
-    
+    provider_class = provider_registry._classes.get(provider_type, OpenAICompatProvider)
     try:
         return provider_class(llm_config, request_timeout)
     except Exception as e:
@@ -519,64 +589,57 @@ def get_provider_for_url(base_url: str) -> str:
     url_lower = base_url.lower()
     if 'anthropic.com' in url_lower:
         return 'claude'
-    elif 'fireworks.ai' in url_lower:
-        return 'fireworks'
     elif 'generativelanguage.googleapis.com' in url_lower:
         return 'gemini'
     return 'openai'
 
 
 def migrate_legacy_config(old_primary: Dict, old_fallback: Dict) -> tuple:
-    """
-    Convert old LLM_PRIMARY/LLM_FALLBACK to new LLM_PROVIDERS format.
-    Returns (providers_dict, fallback_order).
-    """
+    """Convert old LLM_PRIMARY/LLM_FALLBACK to new format."""
     providers = {}
     fallback_order = []
-    
+
     def detect_type(url: str) -> tuple:
         url_lower = url.lower()
         if 'anthropic.com' in url_lower:
             return ('claude', 'claude')
-        elif 'fireworks.ai' in url_lower:
-            return ('fireworks', 'fireworks')
         elif '127.0.0.1' in url or 'localhost' in url_lower:
             return ('lmstudio', 'openai')
         else:
             return ('openai', 'openai')
-    
+
     if old_primary.get('enabled'):
         key, ptype = detect_type(old_primary.get('base_url', ''))
         providers[key] = {
             'provider': ptype,
-            'display_name': PROVIDER_METADATA.get(key, {}).get('display_name', key),
+            'display_name': provider_registry._core_providers.get(key, {}).get('display_name', key),
             'base_url': old_primary.get('base_url', ''),
-            'api_key': old_primary.get('api_key', ''),
             'model': old_primary.get('model', ''),
             'timeout': old_primary.get('timeout', 0.3),
             'enabled': True,
         }
         fallback_order.append(key)
-    
+
     if old_fallback.get('enabled'):
         key, ptype = detect_type(old_fallback.get('base_url', ''))
         if key in providers:
             key = f"{key}_fallback"
         providers[key] = {
             'provider': ptype,
-            'display_name': PROVIDER_METADATA.get(key, {}).get('display_name', key),
+            'display_name': provider_registry._core_providers.get(key, {}).get('display_name', key),
             'base_url': old_fallback.get('base_url', ''),
-            'api_key': old_fallback.get('api_key', ''),
             'model': old_fallback.get('model', ''),
             'timeout': old_fallback.get('timeout', 0.3),
             'enabled': True,
         }
         fallback_order.append(key)
-    
+
     return providers, fallback_order
 
 
 __all__ = [
+    'provider_registry',
+    'ProviderRegistry',
     'get_provider_by_key',
     'get_first_available_provider',
     'get_available_providers',
@@ -593,6 +656,8 @@ __all__ = [
     'OpenAIResponsesProvider',
     'ClaudeProvider',
     'GeminiProvider',
+    'AnthropicCompatProvider',
     'PROVIDER_CLASSES',
     'PROVIDER_METADATA',
+    'DEFAULT_GENERATION_PARAMS',
 ]

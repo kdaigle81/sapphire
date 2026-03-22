@@ -128,7 +128,7 @@ class ExecutionContext:
         provider_key = self.task_settings.get("provider", "auto")
         model_override = self.task_settings.get("model", "")
 
-        providers_config = getattr(config, 'LLM_PROVIDERS', {})
+        providers_config = {**getattr(config, 'LLM_PROVIDERS', {}), **getattr(config, 'LLM_CUSTOM_PROVIDERS', {})}
 
         if provider_key and provider_key not in ("auto", ""):
             provider = get_provider_by_key(
