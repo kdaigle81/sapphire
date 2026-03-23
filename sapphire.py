@@ -594,6 +594,10 @@ def run():
         from core.updater import updater as app_updater
         app_updater.start_background_checker()
 
+        # Scheduled backups (daily at 3am)
+        from core.backup import backup_manager
+        backup_manager.start_scheduler()
+
         # Dev mode: auto-reload plugins on file changes
         import os
         if os.environ.get("SAPPHIRE_DEV"):
