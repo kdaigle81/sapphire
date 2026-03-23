@@ -53,9 +53,19 @@ async function loadProviders() {
 
 function buildProviderSelect(selected) {
     let html = '<option value="">-- Provider --</option>';
-    for (const p of providers) {
+    const core = providers.filter(p => p.is_core);
+    const custom = providers.filter(p => !p.is_core);
+    for (const p of core) {
         const sel = p.key === selected ? ' selected' : '';
         html += `<option value="${p.key}"${sel}>${esc(p.name)}</option>`;
+    }
+    if (custom.length && core.length) {
+        html += '<option disabled>\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</option>';
+    }
+    for (const p of custom) {
+        const model = p.current_model ? ` (${p.current_model.split('/').pop()})` : '';
+        const sel = p.key === selected ? ' selected' : '';
+        html += `<option value="${p.key}"${sel}>${esc(p.name)}${model}</option>`;
     }
     return html;
 }
@@ -64,21 +74,25 @@ function buildModelSelect(providerKey, selectedModel) {
     const prov = providers.find(p => p.key === providerKey);
     if (!prov) return '<option value="">-- select provider first --</option>';
 
+    // Custom providers: model is baked into the instance, no selection needed
+    if (!prov.is_core) {
+        const model = prov.current_model || '(default)';
+        return `<option value="${esc(prov.current_model)}">${esc(model)}</option>`;
+    }
+
+    // Core providers: show model options
     let html = '';
     const models = prov.models || {};
-    const keys = Object.keys(models);
-
-    if (keys.length === 0) {
-        html += `<option value="${esc(prov.current_model)}">${esc(prov.current_model)} (current)</option>`;
-    } else {
-        if (prov.current_model && !models[prov.current_model]) {
-            const sel = prov.current_model === selectedModel ? ' selected' : '';
-            html += `<option value="${esc(prov.current_model)}"${sel}>${esc(prov.current_model)} (current)</option>`;
-        }
-        for (const [mid, label] of Object.entries(models)) {
-            const sel = mid === selectedModel ? ' selected' : '';
-            html += `<option value="${esc(mid)}"${sel}>${esc(label)}</option>`;
-        }
+    if (prov.current_model && !models[prov.current_model]) {
+        const sel = prov.current_model === selectedModel ? ' selected' : '';
+        html += `<option value="${esc(prov.current_model)}"${sel}>${esc(prov.current_model)} (current)</option>`;
+    }
+    for (const [mid, label] of Object.entries(models)) {
+        const sel = mid === selectedModel ? ' selected' : '';
+        html += `<option value="${esc(mid)}"${sel}>${esc(label)}</option>`;
+    }
+    if (!html) {
+        html = `<option value="${esc(prov.current_model)}">${esc(prov.current_model || '(default)')}</option>`;
     }
     return html;
 }
@@ -112,8 +126,16 @@ function renderRoster(container, roster) {
 
         row.querySelector('.agent-r-provider').addEventListener('change', (e) => {
             const modelSel = row.querySelector('.agent-r-model');
+            const prov = providers.find(p => p.key === e.target.value);
             modelSel.innerHTML = buildModelSelect(e.target.value, '');
+            // Disable model dropdown for custom providers (model is baked in)
+            modelSel.disabled = prov && !prov.is_core;
         });
+        // Set initial disabled state
+        const initProv = providers.find(p => p.key === entry.provider);
+        if (initProv && !initProv.is_core) {
+            row.querySelector('.agent-r-model').disabled = true;
+        }
 
         row.querySelector('.agent-del').addEventListener('click', () => {
             syncRosterFromDom(container, roster);
