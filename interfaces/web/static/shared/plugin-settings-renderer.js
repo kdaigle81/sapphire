@@ -107,8 +107,11 @@ function renderWidget(field, value) {
         case 'textarea':
             return `<textarea id="${id}" rows="3" placeholder="${escapeHtml(field.placeholder || '')}">${escapeHtml(String(value))}</textarea>`;
 
-        case 'password':
-            return `<input type="password" id="${id}" value="${escapeHtml(String(value))}" placeholder="${escapeHtml(field.placeholder || '')}">`;
+        case 'password': {
+            const hasValue = value && String(value).trim();
+            const indicator = hasValue ? '<small style="color:var(--success,#4caf50);margin-left:6px">\u2713 Set</small>' : '';
+            return `<input type="password" id="${id}" value="" placeholder="${hasValue ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : 'Enter key'}">${indicator}`;
+        }
 
         case 'select':
             return `<select id="${id}">${(field.options || []).map(o =>
@@ -155,7 +158,10 @@ export function readSettingsForm(container, schema) {
     for (const field of schema) {
         // Skip action buttons — they're not settings
         if ((field.widget || inferWidget(field)) === 'button') continue;
-        result[field.key] = getFieldValue(container, field.key, field);
+        const val = getFieldValue(container, field.key, field);
+        // Skip empty password fields — don't overwrite stored key with empty
+        if (field.type === 'password' && !val) continue;
+        result[field.key] = val;
     }
     return result;
 }

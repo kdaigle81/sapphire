@@ -1,5 +1,7 @@
 // settings-tabs/tts.js - Text-to-speech provider settings
-import { renderProviderTab, attachProviderListeners } from '../../shared/provider-selector.js';
+import { renderProviderTab, attachProviderListeners, mergeRegistryProviders } from '../../shared/provider-selector.js';
+
+let _mergedConfig = null;
 
 const tabConfig = {
     providerKey: 'TTS_PROVIDER',
@@ -18,16 +20,6 @@ const tabConfig = {
                 'TTS_SERVER_HOST', 'TTS_SERVER_PORT',
                 'TTS_PRIMARY_SERVER', 'TTS_FALLBACK_SERVER', 'TTS_FALLBACK_TIMEOUT'
             ]
-        },
-        elevenlabs: {
-            label: 'ElevenLabs (Cloud)',
-            essentialKeys: ['TTS_ELEVENLABS_API_KEY', 'TTS_ELEVENLABS_MODEL', 'TTS_ELEVENLABS_VOICE_ID'],
-            advancedKeys: []
-        },
-        sapphire_router: {
-            label: 'Sapphire Router',
-            essentialKeys: ['SAPPHIRE_ROUTER_URL', 'SAPPHIRE_ROUTER_TENANT_ID'],
-            advancedKeys: []
         }
     },
 
@@ -42,7 +34,8 @@ export default {
     description: 'Text-to-speech engine configuration',
 
     render(ctx) {
-        let html = renderProviderTab(tabConfig, ctx);
+        const cfg = _mergedConfig || tabConfig;
+        let html = renderProviderTab(cfg, ctx);
         html += `
             <div class="settings-grid" style="margin-top: 1rem;">
                 <div class="setting-row full-width">
@@ -55,8 +48,19 @@ export default {
         return html;
     },
 
-    attachListeners(ctx, el) {
-        attachProviderListeners(tabConfig, ctx, el, this);
+    async attachListeners(ctx, el) {
+        // Merge plugin providers (async, updates dropdown after initial render)
+        if (!_mergedConfig) {
+            _mergedConfig = await mergeRegistryProviders(tabConfig);
+            // Re-render dropdown if new providers were added
+            if (Object.keys(_mergedConfig.providers).length > Object.keys(tabConfig.providers).length) {
+                const body = el.querySelector('.settings-tab-body') || el;
+                body.innerHTML = this.render(ctx);
+                if (ctx.attachAccordionListeners) ctx.attachAccordionListeners(el);
+            }
+        }
+        const cfg = _mergedConfig || tabConfig;
+        attachProviderListeners(cfg, ctx, el, this);
 
         const btn = el.querySelector('#tts-test-btn');
         const result = el.querySelector('#tts-test-result');

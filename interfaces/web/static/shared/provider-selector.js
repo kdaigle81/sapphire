@@ -9,6 +9,35 @@
  *   disabledMessage – text when provider is 'none'
  */
 
+/**
+ * Fetch plugin-registered providers from the registry API and merge into tabConfig.
+ * Call this before renderProviderTab() to include dynamically registered providers.
+ */
+export async function mergeRegistryProviders(tabConfig) {
+    const apiMap = { 'TTS_PROVIDER': '/api/tts/providers', 'STT_PROVIDER': '/api/stt/providers' };
+    const url = apiMap[tabConfig.providerKey];
+    if (!url) return tabConfig;
+    try {
+        const res = await fetch(url);
+        if (!res.ok) return tabConfig;
+        const data = await res.json();
+        const merged = { ...tabConfig, providers: { ...tabConfig.providers } };
+        for (const p of (data.providers || [])) {
+            if (!merged.providers[p.key]) {
+                merged.providers[p.key] = {
+                    label: p.display_name || p.key,
+                    essentialKeys: [],
+                    advancedKeys: [],
+                    _plugin: true,
+                };
+            }
+        }
+        return merged;
+    } catch (e) {
+        return tabConfig;
+    }
+}
+
 export function renderProviderTab(tabConfig, ctx) {
     const effective = _filterProviders(tabConfig, ctx);
     const current = _currentProvider(effective, ctx);
@@ -21,6 +50,13 @@ export function renderProviderTab(tabConfig, ctx) {
             ${effective.disabledMessage || 'Disabled. Select a provider above to enable.'}
         </p>`;
         return html;
+    }
+
+    // Plugin providers: show link to plugin settings instead of inline fields
+    if (providerDef._plugin && !providerDef.essentialKeys?.length) {
+        html += `<p class="setting-help" style="padding:12px 0;opacity:0.8">
+            Configure in <strong>Settings \u2192 Plugins \u2192 ${providerDef.label || current}</strong>
+        </p>`;
     }
 
     // Provider-specific essential fields
@@ -83,7 +119,8 @@ function _filterProviders(tabConfig, ctx) {
     const hide = ctx.managed ? MANAGED_HIDE : UNMANAGED_HIDE;
     const filtered = {};
     for (const [key, val] of Object.entries(tabConfig.providers)) {
-        if (!hide.has(key)) filtered[key] = val;
+        // Don't hide plugin-registered providers — user explicitly enabled them
+        if (val._plugin || !hide.has(key)) filtered[key] = val;
     }
     return { ...tabConfig, providers: filtered };
 }
