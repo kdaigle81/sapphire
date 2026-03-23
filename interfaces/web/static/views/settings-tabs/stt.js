@@ -49,7 +49,7 @@ export default {
     },
 
     async attachListeners(ctx, el) {
-        if (!_mergedConfig) {
+        {
             _mergedConfig = await mergeRegistryProviders(tabConfig);
             if (Object.keys(_mergedConfig.providers).length > Object.keys(tabConfig.providers).length) {
                 const body = el.querySelector('.settings-tab-body') || el;

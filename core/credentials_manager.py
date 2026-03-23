@@ -247,8 +247,10 @@ class CredentialsManager:
                     modified = True
 
             if modified:
-                with open(settings_file, 'w', encoding='utf-8') as f:
+                tmp = settings_file.with_suffix('.json.tmp')
+                with open(tmp, 'w', encoding='utf-8') as f:
                     json.dump(user_settings, f, indent=2)
+                tmp.replace(settings_file)
                 logger.info("Cleared stale API keys from settings.json")
 
                 # Also strip from settings_manager's in-memory config so they
@@ -309,8 +311,10 @@ class CredentialsManager:
                     modified = True
 
             if modified:
-                with open(settings_file, 'w', encoding='utf-8') as f:
+                tmp = settings_file.with_suffix('.json.tmp')
+                with open(tmp, 'w', encoding='utf-8') as f:
                     json.dump(user_settings, f, indent=2)
+                tmp.replace(settings_file)
                 logger.info("Cleared service API keys from settings.json")
 
                 # Also strip from in-memory config

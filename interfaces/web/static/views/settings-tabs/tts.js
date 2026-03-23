@@ -49,8 +49,8 @@ export default {
     },
 
     async attachListeners(ctx, el) {
-        // Merge plugin providers (async, updates dropdown after initial render)
-        if (!_mergedConfig) {
+        // Always re-fetch plugin providers (plugins may have been toggled)
+        {
             _mergedConfig = await mergeRegistryProviders(tabConfig);
             // Re-render dropdown if new providers were added
             if (Object.keys(_mergedConfig.providers).length > Object.keys(tabConfig.providers).length) {

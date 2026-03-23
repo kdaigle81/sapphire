@@ -42,6 +42,20 @@ export function renderSettingsForm(container, schema, values = {}, { onChange, m
         if (field.confirm) attachConfirmGate(container, field, managed);
     }
 
+    // Wire up "clear" links for password fields
+    container.querySelectorAll('.ps-clear-key').forEach(link => {
+        link.addEventListener('click', e => {
+            e.preventDefault();
+            const input = container.querySelector(`#${link.dataset.field}`);
+            if (input) {
+                input.value = '__CLEAR__';
+                input.placeholder = 'Key cleared — save to apply';
+                link.closest('.setting-input').querySelector('small')?.remove();
+                link.remove();
+            }
+        });
+    });
+
     // Wire up action buttons
     for (const field of schema) {
         if ((field.widget || inferWidget(field)) !== 'button') continue;
@@ -109,7 +123,9 @@ function renderWidget(field, value) {
 
         case 'password': {
             const hasValue = value && String(value).trim();
-            const indicator = hasValue ? '<small style="color:var(--success,#4caf50);margin-left:6px">\u2713 Set</small>' : '';
+            const indicator = hasValue
+                ? '<small style="color:var(--success,#4caf50);margin-left:6px">\u2713 Set</small> <a href="#" class="ps-clear-key" data-field="' + id + '" style="font-size:var(--font-xs);margin-left:4px;color:var(--text-muted)">clear</a>'
+                : '';
             return `<input type="password" id="${id}" value="" placeholder="${hasValue ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : 'Enter key'}">${indicator}`;
         }
 
@@ -159,8 +175,11 @@ export function readSettingsForm(container, schema) {
         // Skip action buttons — they're not settings
         if ((field.widget || inferWidget(field)) === 'button') continue;
         const val = getFieldValue(container, field.key, field);
-        // Skip empty password fields — don't overwrite stored key with empty
-        if (field.type === 'password' && !val) continue;
+        // Password field: skip if empty (preserve stored key), send empty if sentinel
+        if (field.type === 'password') {
+            if (val === '__CLEAR__') { result[field.key] = ''; continue; }
+            if (!val) continue;
+        }
         result[field.key] = val;
     }
     return result;

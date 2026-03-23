@@ -221,21 +221,26 @@ embedding_registry = EmbeddingRegistry()
 
 # ─── Singleton + hot-swap ────────────────────────────────────────────────────
 
+import threading
 _embedder = None
+_embedder_lock = threading.Lock()
 
 
 def get_embedder():
     global _embedder
     if _embedder is None:
-        key = embedding_registry.get_active_key()
-        _embedder = embedding_registry.create(key)
+        with _embedder_lock:
+            if _embedder is None:  # double-check after lock
+                key = embedding_registry.get_active_key()
+                _embedder = embedding_registry.create(key)
     return _embedder
 
 
 def switch_embedding_provider(provider_name):
     global _embedder
-    logger.info(f"Switching embedding provider to: {provider_name}")
-    _embedder = embedding_registry.create(provider_name or 'none')
+    with _embedder_lock:
+        logger.info(f"Switching embedding provider to: {provider_name}")
+        _embedder = embedding_registry.create(provider_name or 'none')
     # Reset backfill flag so new provider can re-embed missing memories
     try:
         import functions.memory as mem

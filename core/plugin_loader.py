@@ -50,7 +50,9 @@ class PluginState:
 
     def _save(self):
         PLUGIN_STATE_DIR.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
+        tmp = self._path.with_suffix('.json.tmp')
+        tmp.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
+        tmp.replace(self._path)
 
     def get(self, key: str, default=None):
         return self._data.get(key, default)

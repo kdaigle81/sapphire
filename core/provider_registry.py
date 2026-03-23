@@ -6,6 +6,7 @@
 # is handled by subclass overrides.
 
 import logging
+import threading
 from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger(__name__)
@@ -17,11 +18,13 @@ class BaseProviderRegistry:
 
     Subclasses set system_name, setting_key, and register their core providers.
     Plugins register at runtime via register_plugin().
+    Thread-safe via _lock for concurrent register/unregister/create/list.
     """
 
     def __init__(self, system_name: str, setting_key: str):
         self.system_name = system_name
         self.setting_key = setting_key
+        self._lock = threading.Lock()
         self._core: Dict[str, dict] = {}       # key → {class, display_name, ...metadata}
         self._plugins: Dict[str, dict] = {}    # key → {class, display_name, plugin_name, ...}
 
@@ -39,26 +42,28 @@ class BaseProviderRegistry:
     def register_plugin(self, key: str, provider_class, display_name: str,
                          plugin_name: str, **metadata):
         """Plugin registers a custom provider."""
-        if key in self._core:
-            logger.warning(f"[{self.system_name}] Plugin '{plugin_name}' tried to register "
-                          f"key '{key}' which is a core provider — skipping")
-            return
-        self._plugins[key] = {
-            'class': provider_class,
-            'display_name': display_name,
-            'plugin_name': plugin_name,
-            **metadata,
-        }
+        with self._lock:
+            if key in self._core:
+                logger.warning(f"[{self.system_name}] Plugin '{plugin_name}' tried to register "
+                              f"key '{key}' which is a core provider — skipping")
+                return
+            self._plugins[key] = {
+                'class': provider_class,
+                'display_name': display_name,
+                'plugin_name': plugin_name,
+                **metadata,
+            }
         logger.info(f"[{self.system_name}] Plugin provider registered: {key} ({display_name}) "
                     f"from {plugin_name}")
 
     def unregister_plugin(self, plugin_name: str):
         """Remove all providers registered by a plugin."""
-        to_remove = [k for k, v in self._plugins.items()
-                     if v.get('plugin_name') == plugin_name]
-        for key in to_remove:
-            self._plugins.pop(key, None)
-            logger.info(f"[{self.system_name}] Plugin provider unregistered: {key}")
+        with self._lock:
+            to_remove = [k for k, v in self._plugins.items()
+                         if v.get('plugin_name') == plugin_name]
+            for key in to_remove:
+                self._plugins.pop(key, None)
+                logger.info(f"[{self.system_name}] Plugin provider unregistered: {key}")
 
     # ── Factory ──
 
@@ -82,8 +87,10 @@ class BaseProviderRegistry:
 
     def get_all(self) -> List[Dict[str, Any]]:
         """Return all available providers for UI rendering."""
+        with self._lock:
+            snapshot = {**self._core, **self._plugins}
         result = []
-        for key, entry in {**self._core, **self._plugins}.items():
+        for key, entry in snapshot.items():
             result.append({
                 'key': key,
                 'display_name': entry.get('display_name', key),

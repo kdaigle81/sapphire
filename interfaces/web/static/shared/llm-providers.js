@@ -508,9 +508,13 @@ export function initProviderDragDrop(listContainer, onReorder) {
       }
     });
 
-    document.addEventListener('mouseup', () => {
-      card.setAttribute('draggable', 'true');
-    });
+  });
+
+  // Single mouseup handler on container (not document) — no stacking
+  listContainer.addEventListener('mouseup', () => {
+    listContainer.querySelectorAll('.provider-card').forEach(c =>
+      c.setAttribute('draggable', 'true')
+    );
   });
 }
 
