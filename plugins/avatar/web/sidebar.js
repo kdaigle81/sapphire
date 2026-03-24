@@ -5,8 +5,6 @@ const THREE_CDN = 'https://esm.sh/three@0.170.0';
 const GLTF_CDN = 'https://esm.sh/three@0.170.0/addons/loaders/GLTFLoader.js';
 const ORBIT_CDN = 'https://esm.sh/three@0.170.0/addons/controls/OrbitControls.js';
 const CROSSFADE_MS = 400;
-const CAM_ZOOM_MIN = 2.0;
-const CAM_ZOOM_MAX = 8.0;
 
 // Hardcoded fallback defaults (used when no config exists)
 const FALLBACK_TRACK_MAP = {
@@ -83,6 +81,7 @@ export async function init(container) {
     let greetingTrack = 'wave';
     let camPos = { ...FALLBACK_CAMERA };
     let camTarget = { ...FALLBACK_TARGET };
+    let modelScale = 1.0;
 
     try {
         const resp = await fetch('/api/plugin/avatar/config');
@@ -96,6 +95,7 @@ export async function init(container) {
                 if (modelCfg.greeting_track !== undefined) greetingTrack = modelCfg.greeting_track;
                 if (modelCfg.camera) camPos = modelCfg.camera;
                 if (modelCfg.target) camTarget = modelCfg.target;
+                if (modelCfg.scale) modelScale = modelCfg.scale;
             }
         }
     } catch (e) { /* use fallbacks */ }
@@ -148,8 +148,8 @@ export async function init(container) {
     // Orbit controls
     const controls = new OrbitControls(camera, canvas);
     controls.target.set(camTarget.x, camTarget.y, camTarget.z);
-    controls.minDistance = CAM_ZOOM_MIN;
-    controls.maxDistance = CAM_ZOOM_MAX;
+    controls.minDistance = 0.5;
+    controls.maxDistance = 20;
     controls.enablePan = true;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
@@ -196,6 +196,33 @@ export async function init(container) {
         });
 
         scene.add(gltf.scene);
+
+        // Apply scale from config (user-controlled, default 1.0)
+        if (modelScale !== 1.0) {
+            gltf.scene.scale.multiplyScalar(modelScale);
+        }
+
+        // Frame camera on model center after scaling
+        const box = new THREE.Box3().setFromObject(gltf.scene);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+
+        // If no custom camera was saved, auto-frame based on model bounds
+        const hasCustomCamera = (avatarConfig.models || {})[modelFile]?.camera;
+        if (!hasCustomCamera) {
+            const dist = Math.max(size.y, size.x) * 2.5;
+            camTarget = { x: center.x, y: center.y, z: center.z };
+            camPos = { x: center.x, y: center.y + size.y * 0.1, z: center.z + dist };
+            camera.position.set(camPos.x, camPos.y, camPos.z);
+            controls.target.set(camTarget.x, camTarget.y, camTarget.z);
+            controls.update();
+        }
+
+        // Dynamic zoom limits based on model size
+        const maxDim = Math.max(size.x, size.y, size.z);
+        controls.minDistance = maxDim * 0.3;
+        controls.maxDistance = maxDim * 10;
+
         mixer = new THREE.AnimationMixer(gltf.scene);
 
         for (const clip of gltf.animations) {

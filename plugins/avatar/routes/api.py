@@ -16,40 +16,57 @@ def _get_state():
     return plugin_loader.get_plugin_state("avatar")
 
 
+_seeded = False
+
 def _get_config():
-    """Load full avatar config from plugin state."""
+    """Load full avatar config from plugin state. Auto-seeds defaults once for unconfigured models."""
+    global _seeded
     state = _get_state()
-    return {
-        'active_model': state.get('active_model', 'sapphire.glb'),
-        'models': state.get('models', {}),
-    }
+    active = state.get('active_model', 'sapphire.glb')
+    models = state.get('models', {})
+
+    # Auto-seed only once per process
+    if not _seeded:
+        from plugins.avatar.glb_parser import extract_tracks, build_default_config
+        AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+        changed = False
+        for f in AVATAR_DIR.glob('*.glb'):
+            if f.name not in models:
+                tracks = extract_tracks(f)
+                if tracks:
+                    models[f.name] = build_default_config([t['name'] for t in tracks])
+                    changed = True
+        if changed:
+            state.save('models', models)
+        _seeded = True
+
+    return {'active_model': active, 'models': models}
 
 
 def _save_config(cfg):
     """Save avatar config to plugin state."""
     state = _get_state()
-    state.set('active_model', cfg.get('active_model', 'sapphire.glb'))
-    state.set('models', cfg.get('models', {}))
+    state.save('active_model', cfg.get('active_model', 'sapphire.glb'))
+    state.save('models', cfg.get('models', {}))
 
 
 # GET /api/plugin/avatar/models
 async def list_models(**kwargs):
-    """List available avatar models with track info."""
-    from plugins.avatar.glb_parser import get_model_info
-
+    """List available avatar models (lightweight — no GLB parsing)."""
     AVATAR_DIR.mkdir(parents=True, exist_ok=True)
     cfg = _get_config()
+    models_cfg = cfg.get('models', {})
     models = []
 
     for f in sorted(AVATAR_DIR.glob('*.glb')):
-        info = get_model_info(f)
-        model_cfg = cfg.get('models', {}).get(f.name, {})
+        model_cfg = models_cfg.get(f.name, {})
+        track_count = len(model_cfg.get('track_map', {})) or len(model_cfg.get('idle_pool', []))
         models.append({
             'filename': f.name,
             'size': f.stat().st_size,
             'active': f.name == cfg.get('active_model'),
             'configured': bool(model_cfg),
-            'info': info,
+            'track_count': track_count,
         })
 
     return {'models': models, 'active_model': cfg.get('active_model')}

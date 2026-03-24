@@ -6,7 +6,7 @@
   "icon": "\ud83d\udc8e",
   "priority": 80,
   "default_enabled": false,
-  "settingsUI": null,
+  "settingsUI": "plugin",
   "capabilities": {
     "sidebar_accordion": {
       "title": "Avatar",
