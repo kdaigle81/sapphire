@@ -16,13 +16,16 @@ async function fetchJSON(url, opts = {}) {
 
 // Avatar states that need track mapping
 const AVATAR_STATES = [
-    { key: 'idle',      label: 'Idle' },
-    { key: 'thinking',  label: 'Thinking' },
-    { key: 'listening', label: 'Listening' },
-    { key: 'speaking',  label: 'Speaking' },
-    { key: 'toolcall',  label: 'Tool Use' },
-    { key: 'happy',     label: 'Happy' },
-    { key: 'wakeword',  label: 'Alert' },
+    { key: 'idle',        label: 'Idle' },
+    { key: 'thinking',    label: 'Thinking' },
+    { key: 'typing',      label: 'Composing' },
+    { key: 'listening',   label: 'Listening' },
+    { key: 'speaking',    label: 'Speaking' },
+    { key: 'toolcall',    label: 'Tool Use' },
+    { key: 'happy',       label: 'Happy' },
+    { key: 'wakeword',    label: 'Alert' },
+    { key: 'user_typing', label: 'User Typing' },
+    { key: 'reading',     label: 'Reading' },
 ];
 
 let _renderContainer = null;

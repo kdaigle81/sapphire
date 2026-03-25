@@ -247,6 +247,10 @@ export const Events = {
     AGENT_COMPLETED: 'agent_completed',
     AGENT_DISMISSED: 'agent_dismissed',
 
+    // User interaction events (avatar state triggers)
+    USER_TYPING: 'user_typing',       // User is typing in chat input
+    USER_SENT: 'user_sent',           // User sent a message
+
     // Connection events
     CONNECTED: 'connected',           // Server confirms SSE subscription
     BUS_CONNECTED: 'bus_connected',   // Client-side: EventSource opened

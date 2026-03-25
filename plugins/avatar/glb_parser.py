@@ -77,14 +77,17 @@ def get_model_info(glb_path):
 
 # Common animation name patterns for auto-mapping
 AUTO_MAP = {
-    'idle':      ['idle', 'stand', 'standing', 'rest', 'default', 'defaultanim', 'breathe', 'breathing'],
-    'thinking':  ['thinking', 'think', 'ponder', 'concentrate', 'focus'],
-    'listening': ['listening', 'listen', 'hear', 'attentive', 'look', 'lookaround'],
-    'speaking':  ['speaking', 'speak', 'talk', 'talking', 'say', 'attention'],
-    'toolcall':  ['action', 'use', 'grab', 'reach', 'attention2', 'interact'],
-    'happy':     ['happy', 'joy', 'celebrate', 'cheer', 'smile', 'excited', 'victory'],
-    'wakeword':  ['alert', 'surprise', 'startle', 'notice', 'attention'],
-    'wave':      ['wave', 'greet', 'greeting', 'hello', 'hi', 'bye', 'farewell'],
+    'idle':        ['idle', 'stand', 'standing', 'rest', 'default', 'breathe', 'breathing'],
+    'thinking':    ['thinking', 'think', 'ponder', 'concentrate', 'focus'],
+    'typing':      ['typing', 'type', 'keyboard', 'defaultanim', 'compose', 'writing'],
+    'listening':   ['listening', 'listen', 'hear', 'attentive', 'look', 'lookaround'],
+    'speaking':    ['speaking', 'speak', 'talk', 'talking', 'say', 'attention'],
+    'toolcall':    ['action', 'use', 'grab', 'reach', 'attention2', 'interact'],
+    'happy':       ['happy', 'joy', 'celebrate', 'cheer', 'smile', 'excited', 'victory'],
+    'wakeword':    ['alert', 'surprise', 'startle', 'notice', 'attention'],
+    'wave':        ['wave', 'greet', 'greeting', 'hello', 'hi', 'bye', 'farewell'],
+    'user_typing': ['curious', 'notice', 'perk', 'attentive'],
+    'reading':     ['read', 'reading', 'look_down', 'study'],
 }
 
 
@@ -112,7 +115,7 @@ def build_default_config(track_names):
     # Default track map — fill unmapped states with idle or first track
     fallback = mapped.get('idle', track_names[0] if track_names else 'idle')
     track_map = {}
-    for state in ['idle', 'thinking', 'listening', 'speaking', 'toolcall', 'happy', 'wakeword']:
+    for state in ['idle', 'thinking', 'typing', 'listening', 'speaking', 'toolcall', 'happy', 'wakeword', 'user_typing', 'reading']:
         track_map[state] = mapped.get(state, fallback)
 
     # Default idle pool — include idle + any mapped tracks at low weights

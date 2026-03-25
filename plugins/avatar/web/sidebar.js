@@ -11,16 +11,18 @@ const ORBIT_CDN = 'https://esm.sh/three@0.170.0/addons/controls/OrbitControls.js
 const CROSSFADE_MS = 400;
 
 // Hardcoded fallback defaults (used when no config exists)
+// Track names: idle, listening, thinking, attention, attention2, defaultanim(=typing), happy, wave
 const FALLBACK_TRACK_MAP = {
     idle: 'idle', listening: 'listening', processing: 'thinking',
-    thinking: 'thinking', typing: 'thinking', speaking: 'attention',
+    thinking: 'thinking', typing: 'defaultanim', speaking: 'attention',
     toolcall: 'attention2', wakeword: 'attention', happy: 'happy',
     wave: 'wave', error: 'idle', agent: 'thinking', cron: 'thinking',
+    user_typing: 'attention', reading: 'listening',
 };
 const FALLBACK_IDLE_POOL = [
     { track: 'idle', weight: 60, oneshot: false },
-    { track: 'defaultanim', weight: 20, oneshot: false },
-    { track: 'listening', weight: 8, oneshot: false },
+    { track: 'defaultanim', weight: 10, oneshot: false },  // typing on keyboard — idle variety
+    { track: 'listening', weight: 10, oneshot: false },
     { track: 'attention', weight: 5, oneshot: true },
     { track: 'happy', weight: 4, oneshot: true },
     { track: 'wave', weight: 3, oneshot: true },
@@ -30,19 +32,21 @@ const FALLBACK_TARGET = { x: 0, y: 1.1, z: 0 };
 
 // State machine — priority-based with persist/duration (not configurable)
 const STATES = {
-    idle:       { priority: 0 },
-    listening:  { priority: 30, persist: true },
-    processing: { priority: 25, persist: true },
-    thinking:   { priority: 20, persist: true },
-    typing:     { priority: 40, persist: true },
-    speaking:   { priority: 50, persist: true },
-    toolcall:   { priority: 35, duration: 3000 },
-    wakeword:   { priority: 45, duration: 2000 },
-    error:      { priority: 10, duration: 4000 },
-    happy:      { priority: 5,  duration: 3000 },
-    agent:      { priority: 15, persist: true },
-    cron:       { priority: 12, duration: 3000 },
-    wave:       { priority: 5,  duration: 4500 },
+    idle:        { priority: 0 },
+    user_typing: { priority: 8,  duration: 3000 },   // user is typing — she notices
+    reading:     { priority: 22, duration: 2500 },    // user sent — she reads the message
+    listening:   { priority: 30, persist: true },
+    processing:  { priority: 25, persist: true },
+    thinking:    { priority: 20, persist: true },
+    typing:      { priority: 40, persist: true },     // AI composing — virtual keyboard anim
+    speaking:    { priority: 50, persist: true },
+    toolcall:    { priority: 35, duration: 3000 },
+    wakeword:    { priority: 45, duration: 2000 },
+    error:       { priority: 10, duration: 4000 },
+    happy:       { priority: 5,  duration: 3000 },
+    agent:       { priority: 15, persist: true },
+    cron:        { priority: 12, duration: 3000 },
+    wave:        { priority: 5,  duration: 4500 },
 };
 
 // force: true = always transitions, even through a persist state
@@ -65,6 +69,8 @@ const TRANSITIONS = {
     [eventBus.Events.AGENT_DISMISSED]:      { state: 'idle', force: true },
     [eventBus.Events.CONTINUITY_TASK_STARTING]: { state: 'cron' },
     [eventBus.Events.CONTINUITY_TASK_COMPLETE]: { state: 'idle', force: true },
+    [eventBus.Events.USER_TYPING]:  { state: 'user_typing' },
+    [eventBus.Events.USER_SENT]:    { state: 'reading' },
 };
 
 // Track cleanup between sidebar reloads
