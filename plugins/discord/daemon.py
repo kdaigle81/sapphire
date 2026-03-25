@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,8 @@ _thread: threading.Thread = None
 _clients: dict = {}  # {account_name: discord.Client}
 _stop_event = threading.Event()
 _plugin_loader = None
+_last_connect_time: float = 0  # prevent rapid reconnects
+_CONNECT_COOLDOWN = 30  # seconds between full reconnect cycles
 
 
 def start(plugin_loader, settings):
@@ -105,6 +108,15 @@ def _run_loop():
 
 async def _connect_accounts():
     """Load bot tokens from plugin state and connect only those with active daemon tasks."""
+    global _last_connect_time
+
+    # Cooldown — prevent rapid reconnects from hammering Discord's API
+    elapsed = time.monotonic() - _last_connect_time
+    if _last_connect_time > 0 and elapsed < _CONNECT_COOLDOWN:
+        wait = _CONNECT_COOLDOWN - elapsed
+        logger.info(f"[DISCORD] Cooldown: waiting {wait:.0f}s before reconnecting")
+        await asyncio.sleep(wait)
+
     from core.plugin_loader import plugin_loader
     state = plugin_loader.get_plugin_state("discord")
     accounts = state.get("accounts", {})
@@ -119,13 +131,19 @@ async def _connect_accounts():
         logger.info("[DISCORD] No active daemon tasks — not connecting any bots")
         return
 
-    for name, meta in accounts.items():
+    _last_connect_time = time.monotonic()
+
+    for i, (name, meta) in enumerate(accounts.items()):
         if name not in active:
             logger.debug(f"[DISCORD] Skipping '{name}' — no active daemon task")
             continue
         token = meta.get("token", "")
         if not token:
             continue
+        # Stagger connections — 5s between each bot to avoid rate limits
+        if i > 0:
+            logger.info(f"[DISCORD] Staggering connection for '{name}' (5s)")
+            await asyncio.sleep(5)
         try:
             await _connect_single(name, token)
         except Exception as e:
@@ -211,9 +229,23 @@ async def _connect_single(account_name: str, token: str = None):
 
     _clients[account_name] = client
 
-    # Start client as a background task on the current loop
-    # discord.py's start() handles login + gateway connection
-    asyncio.ensure_future(client.start(token))
+    # Start client with retry on rate limit
+    async def _start_with_retry():
+        for attempt in range(3):
+            try:
+                await client.start(token)
+                return
+            except Exception as e:
+                if '429' in str(e) and attempt < 2:
+                    wait = 10 * (attempt + 1)
+                    logger.warning(f"[DISCORD] Rate limited on connect for '{account_name}', retrying in {wait}s")
+                    await asyncio.sleep(wait)
+                else:
+                    logger.error(f"[DISCORD] Failed to start '{account_name}': {e}")
+                    _clients.pop(account_name, None)
+                    return
+
+    asyncio.ensure_future(_start_with_retry())
 
 
 async def send_message(account_name: str, channel_id: int, text: str):

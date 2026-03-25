@@ -1,5 +1,8 @@
 // 3D Avatar — threejs GLTF with animation blending driven by SSE events
 import * as eventBus from '/static/core/event-bus.js';
+import * as audio from '/static/audio.js';
+import { triggerSendWithText } from '/static/handlers/send-handlers.js';
+import { createEnvironment } from './environment.js';
 
 const THREE_CDN = 'https://esm.sh/three@0.170.0';
 const GLTF_CDN = 'https://esm.sh/three@0.170.0/addons/loaders/GLTFLoader.js';
@@ -78,6 +81,7 @@ export async function init(container) {
     const btnExpand = container.querySelector('#avatar-btn-expand');
     const btnFullscreen = container.querySelector('#avatar-btn-fullscreen');
     let displayMode = 'sidebar';
+    let _onDisplayModeChange = null;  // set after scene is ready
 
     function setDisplayMode(mode) {
         if (mode === displayMode) return;
@@ -102,6 +106,7 @@ export async function init(container) {
             if (btnExpand) { btnExpand.innerHTML = '&#x2715;'; btnExpand.title = 'Exit fullscreen'; }
             if (btnFullscreen) btnFullscreen.style.display = 'none';
         }
+        if (_onDisplayModeChange) _onDisplayModeChange(mode);
     }
 
     btnExpand?.addEventListener('click', () => {
@@ -125,6 +130,7 @@ export async function init(container) {
 
     // Early cleanup — covers cases where Three.js or model loading fails
     _cleanup = () => {
+        clearInterval(_micPoll);
         document.removeEventListener('keydown', _onEscKey);
         document.removeEventListener('fullscreenchange', _onFsChange);
         if (displayMode !== 'sidebar') {
@@ -133,6 +139,63 @@ export async function init(container) {
         }
         _cleanup = null;
     };
+
+    // --- Fullwindow STT mic ---
+    let _micPoll = null;
+    const avatarMic = container.querySelector('#avatar-mic');
+    if (avatarMic) {
+        const updateMicState = () => {
+            const ttsActive = audio.isTtsPlaying() || audio.isLocalTtsPlaying();
+            if (ttsActive) {
+                avatarMic.classList.add('tts-playing');
+                avatarMic.classList.remove('recording');
+                avatarMic.textContent = '\u23F9';
+            } else if (audio.getRecState()) {
+                avatarMic.classList.add('recording');
+                avatarMic.classList.remove('tts-playing');
+                avatarMic.textContent = '\u23FA';
+            } else {
+                avatarMic.classList.remove('recording', 'tts-playing');
+                avatarMic.textContent = '\uD83C\uDFA4';
+            }
+        };
+        avatarMic.addEventListener('mousedown', async (e) => {
+            e.preventDefault();
+            if (audio.isTtsPlaying() || audio.isLocalTtsPlaying()) {
+                audio.stop(true);
+            } else {
+                await audio.handlePress(avatarMic);
+            }
+            updateMicState();
+        });
+        avatarMic.addEventListener('mouseup', async () => {
+            await audio.handleRelease(avatarMic, triggerSendWithText);
+            updateMicState();
+        });
+        avatarMic.addEventListener('touchstart', async (e) => {
+            e.preventDefault();
+            if (audio.isTtsPlaying() || audio.isLocalTtsPlaying()) {
+                audio.stop(true);
+            } else {
+                await audio.handlePress(avatarMic);
+            }
+            updateMicState();
+        });
+        avatarMic.addEventListener('touchend', async () => {
+            await audio.handleRelease(avatarMic, triggerSendWithText);
+            updateMicState();
+        });
+        avatarMic.addEventListener('mouseleave', () => {
+            if (audio.getRecState()) {
+                setTimeout(() => {
+                    if (audio.getRecState()) audio.handleRelease(avatarMic, triggerSendWithText);
+                    updateMicState();
+                }, 500);
+            }
+        });
+        // Poll mic state while in expanded mode
+        _micPoll = setInterval(updateMicState, 300);
+    }
 
     // --- Load config from backend ---
     let avatarConfig = {};
@@ -202,6 +265,9 @@ export async function init(container) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+    // Environment (procedural scene — only visible in expanded modes)
+    const env = createEnvironment(scene, THREE, renderer);
+
     // Camera — from config
     const camera = new THREE.PerspectiveCamera(30, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
     camera.position.set(camPos.x, camPos.y, camPos.z);
@@ -226,8 +292,9 @@ export async function init(container) {
         controls.update();
     });
 
-    // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    // Lighting (default — used in sidebar mode, hidden when environment is active)
+    const defaultAmbient = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(defaultAmbient);
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     dirLight.position.set(2, 3, 2);
     scene.add(dirLight);
@@ -307,6 +374,22 @@ export async function init(container) {
         } else {
             crossfadeTo('idle');
         }
+
+        // Enable avatar shadow casting for environment
+        env.enableAvatarShadows(gltf.scene);
+
+        // Wire environment toggle to display mode changes
+        _onDisplayModeChange = (mode) => {
+            const expanded = mode !== 'sidebar';
+            env.setVisible(expanded);
+            defaultAmbient.visible = !expanded;
+            dirLight.visible = !expanded;
+            // Rim light stays on always — it's her signature
+        };
+
+        // Expand zoom limits for environment exploration
+        controls.maxDistance = 25;
+
     } catch (e) {
         console.error('[Avatar] Failed to load model:', e);
         canvas.style.display = 'none';
@@ -445,7 +528,9 @@ export async function init(container) {
     function animate() {
         if (!running) return;
         requestAnimationFrame(animate);
-        if (mixer) mixer.update(clock.getDelta());
+        const delta = clock.getDelta();
+        if (mixer) mixer.update(delta);
+        env.update(delta);
         controls.update();
         resize();
         renderer.render(scene, camera);
@@ -458,6 +543,7 @@ export async function init(container) {
         clearTimeout(resetTimer);
         clearTimeout(idleTimer);
         clearTimeout(_avatarReturnTimer);
+        clearInterval(_micPoll);
         unsubs.forEach(fn => fn());
         controls.dispose();
         renderer.dispose();
