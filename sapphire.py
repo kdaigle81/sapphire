@@ -63,6 +63,7 @@ except Exception as e:
 from core.process_manager import ProcessManager, kill_process_on_port
 
 from core import prompts
+from core.event_bus import publish, Events
 from core.toolsets import toolset_manager
 
 
@@ -439,16 +440,20 @@ class VoiceChatSystem:
             logger.warning("process_llm_query: already processing, skipping duplicate")
             return None
         try:
+            publish(Events.AI_TYPING_START)
             response_text = self.llm_chat.chat(query)
 
             if response_text:
+                publish(Events.AI_TYPING_END)
                 if not skip_tts:
                     self.tts.speak(response_text)
                 return response_text
             else:
+                publish(Events.AI_TYPING_END)
                 logger.warning("Empty response from processing")
 
         except Exception as e:
+            publish(Events.AI_TYPING_END)
             logger.error(f"Error in process_llm_query: {e}")
             if not skip_tts:
                 self.speak_error('processing')

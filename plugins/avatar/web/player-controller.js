@@ -31,10 +31,16 @@ export function createPlayerController(camera, controls, canvas, THREE) {
     const right = new THREE.Vector3();
 
     // --- Input handlers ---
+    const PLAYER_KEYS = new Set([
+        'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'Space',
+        'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
+        'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+    ]);
     const onKeyDown = (e) => {
         if (!enabled || !locked) return;
+        if (PLAYER_KEYS.has(e.code)) e.preventDefault();
         keys[e.code] = true;
-        if (e.code === 'Space') { e.preventDefault(); tryJump(); }
+        if (e.code === 'Space') tryJump();
     };
 
     const onKeyUp = (e) => {
@@ -129,8 +135,8 @@ export function createPlayerController(camera, controls, canvas, THREE) {
     function update(delta) {
         if (!enabled) return;
 
-        // Crouch (Ctrl)
-        crouching = keys['ControlLeft'] || keys['ControlRight'];
+        // Crouch (C or Ctrl)
+        crouching = keys['KeyC'] || keys['ControlLeft'] || keys['ControlRight'];
         const targetHeight = crouching ? CROUCH_HEIGHT : PLAYER_HEIGHT;
         currentHeight += (targetHeight - currentHeight) * Math.min(1, delta * 10);
 
@@ -140,7 +146,11 @@ export function createPlayerController(camera, controls, canvas, THREE) {
         }
         let camY = camera.position.y + velocityY * delta;
         const groundLevel = GROUND_Y + currentHeight;
-        if (camY <= groundLevel) {
+        if (onGround) {
+            // Stay on ground — tracks crouch height changes
+            camY = groundLevel;
+            velocityY = 0;
+        } else if (camY <= groundLevel) {
             camY = groundLevel;
             velocityY = 0;
             onGround = true;

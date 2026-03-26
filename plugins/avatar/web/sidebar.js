@@ -296,6 +296,38 @@ export async function init(container) {
             _thinkOpen = false;
         }));
 
+        // Wakeword conversations bypass streaming — fetch messages when LLM finishes
+        let _wakewordPending = false;
+        _chatUnsubs.push(eventBus.on(eventBus.Events.WAKEWORD_DETECTED, () => {
+            _wakewordPending = true;
+        }));
+        _chatUnsubs.push(eventBus.on(eventBus.Events.AI_TYPING_END, async () => {
+            if (!_wakewordPending) return;
+            _wakewordPending = false;
+            try {
+                const resp = await fetch('/api/history');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const msgs = data.messages || [];
+                const recent = msgs.slice(-2);
+                for (const m of recent) {
+                    if (m.role === 'user') {
+                        const text = (m.content || '').trim();
+                        if (text) addChatMsg('user', text);
+                    } else if (m.role === 'assistant' && m.parts) {
+                        // Assistant uses parts array
+                        const text = m.parts
+                            .filter(p => p.type === 'content')
+                            .map(p => p.text || '')
+                            .join('')
+                            .replace(/<think>[\s\S]*?<\/think>/gi, '')
+                            .trim();
+                        if (text) addChatMsg('ai', text);
+                    }
+                }
+            } catch (e) { /* silent */ }
+        }));
+
         // AI starts — show stop button, reset stream state
         _chatUnsubs.push(eventBus.on(eventBus.Events.AI_TYPING_START, () => {
             _aiStreamEl = null;
