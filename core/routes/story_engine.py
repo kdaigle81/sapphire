@@ -301,8 +301,10 @@ async def save_game_state(chat_name: str, request: Request, _=Depends(require_lo
     saves_dir = PROJECT_ROOT / "user" / "story_saves" / preset_name
     saves_dir.mkdir(parents=True, exist_ok=True)
     slot_file = saves_dir / f"slot_{slot}.json"
-    with open(slot_file, 'w', encoding='utf-8') as f:
+    tmp_path = slot_file.with_suffix('.tmp')
+    with open(tmp_path, 'w', encoding='utf-8') as f:
         json.dump(save_data, f, indent=2)
+    tmp_path.replace(slot_file)
 
     msg_count = len(messages)
     return {"status": "saved", "slot": slot, "timestamp": save_data["timestamp"], "message_count": msg_count}

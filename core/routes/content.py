@@ -92,11 +92,12 @@ async def get_prompt(name: str, request: Request, _=Depends(require_login)):
 async def save_prompt(name: str, request: Request, _=Depends(require_login)):
     """Save a prompt."""
     data = await request.json()
-    if prompts.save_prompt(name, data):
+    success, msg = prompts.save_prompt(name, data)
+    if success:
         publish(Events.PROMPT_CHANGED, {"name": name, "action": "saved"})
         return {"status": "success", "name": name}
     else:
-        raise HTTPException(status_code=500, detail="Failed to save prompt")
+        raise HTTPException(status_code=400, detail=msg or "Failed to save prompt")
 
 
 @router.delete("/api/prompts/{name}")

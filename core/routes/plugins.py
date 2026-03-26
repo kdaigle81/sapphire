@@ -600,8 +600,10 @@ async def update_plugin_settings(plugin_name: str, request: Request, _=Depends(r
 
     USER_PLUGIN_SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
     settings_file = USER_PLUGIN_SETTINGS_DIR / f"{plugin_name}.json"
-    with open(settings_file, 'w', encoding='utf-8') as f:
+    tmp_path = settings_file.with_suffix('.tmp')
+    with open(tmp_path, 'w', encoding='utf-8') as f:
         json.dump(settings, f, indent=2)
+    tmp_path.replace(settings_file)
 
     return {"status": "success", "plugin": plugin_name, "settings": settings}
 

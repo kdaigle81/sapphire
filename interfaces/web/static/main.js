@@ -380,6 +380,20 @@ function initEventBus() {
         await updateScene();
     });
 
+    // SSE reconnect — resync state in case events were missed during disconnect
+    let _sseConnectedOnce = false;
+    eventBus.on(eventBus.Events.BUS_CONNECTED, async () => {
+        if (!_sseConnectedOnce) {
+            _sseConnectedOnce = true;
+            return; // Skip initial connect — state is fresh from page load
+        }
+        console.log('[Main] SSE reconnected — resyncing state');
+        await refreshInitData();
+        await populateChatDropdown();
+        await refresh(false);
+        await updateScene();
+    });
+
     // STT events
     eventBus.on(eventBus.Events.STT_RECORDING_START, () => {});
     eventBus.on(eventBus.Events.STT_RECORDING_END, () => {});

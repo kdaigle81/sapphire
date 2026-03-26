@@ -221,10 +221,11 @@ async def update_settings_batch(request: Request, _=Depends(require_login)):
             results.append({"key": key, "status": "error", "error": str(e)})
     # Persist all settings in one disk write (instead of N individual saves)
     if persist and persisted_keys:
-        settings._user.update(persisted_keys)
-        for key in persisted_keys:
-            settings._runtime.pop(key, None)
-        settings.save()
+        with settings._lock:
+            settings._user.update(persisted_keys)
+            for key in persisted_keys:
+                settings._runtime.pop(key, None)
+            settings.save()
     # Execute deferred provider switches (config values are now set)
     system = get_system()
     for action, value, key, tier in deferred_actions:
@@ -298,8 +299,10 @@ async def save_chat_defaults(request: Request, _=Depends(require_login)):
     data = await request.json()
     defaults_path = PROJECT_ROOT / "user" / "settings" / "chat_defaults.json"
     defaults_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(defaults_path, 'w') as f:
+    tmp_path = defaults_path.with_suffix('.tmp')
+    with open(tmp_path, 'w') as f:
         json.dump(data, f, indent=2)
+    tmp_path.replace(defaults_path)
     return {"status": "success"}
 
 

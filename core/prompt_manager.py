@@ -272,8 +272,10 @@ class PromptManager:
             data['scenario_presets'] = self._scenario_presets
 
             # Save back
-            with open(target_path, 'w', encoding='utf-8') as f:
+            tmp_path = target_path.with_suffix('.tmp')
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
+            tmp_path.replace(target_path)
             logger.info(f"Saved scenario presets to {target_path}")
     
     def save_monoliths(self):
@@ -302,8 +304,10 @@ class PromptManager:
                     data[name] = {'content': str(mono), 'privacy_required': False}
 
             # Save
-            with open(target_path, 'w', encoding='utf-8') as f:
+            tmp_path = target_path.with_suffix('.tmp')
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
+            tmp_path.replace(target_path)
             logger.info(f"Saved monoliths to {target_path}")
     
     def save_components(self):
@@ -322,8 +326,10 @@ class PromptManager:
             data['components'] = self._components
 
             # Save back
-            with open(target_path, 'w', encoding='utf-8') as f:
+            tmp_path = target_path.with_suffix('.tmp')
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
+            tmp_path.replace(target_path)
             logger.info(f"Saved components to {target_path}")
     
     def save_spices(self):
@@ -339,8 +345,10 @@ class PromptManager:
                 data["_disabled_categories"] = sorted(list(self._disabled_categories))
             data.update(self._spices)
 
-            with open(target_path, 'w', encoding='utf-8') as f:
+            tmp_path = target_path.with_suffix('.tmp')
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+            tmp_path.replace(target_path)
             logger.info(f"Saved spices to {target_path}")
     
     def is_category_enabled(self, category: str) -> bool:
