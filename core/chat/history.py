@@ -39,6 +39,9 @@ SYSTEM_DEFAULTS = {
     "people_scope": "default",
     "email_scope": "default",
     "bitcoin_scope": "default",
+    "gcal_scope": "default",
+    "telegram_scope": "default",
+    "discord_scope": "default",
     "trim_color": "",
     "persona": None
 }

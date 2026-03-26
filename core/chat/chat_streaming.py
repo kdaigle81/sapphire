@@ -736,6 +736,11 @@ class StreamingChat:
             raise
         except Exception as e:
             logger.error(f"[ERR] [STREAMING FATAL] Unhandled error: {e}", exc_info=True)
+            # Save error so history doesn't end with a dangling user message
+            # (consecutive user messages break Claude's alternating requirement)
+            self.main_chat.session_manager.add_assistant_final(
+                f"[Error: {type(e).__name__}: {e}]"
+            )
             self._cleanup_stream()
             raise
         

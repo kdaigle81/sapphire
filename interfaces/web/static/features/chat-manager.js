@@ -5,6 +5,7 @@ import * as ui from '../ui.js';
 import { getElements, getIsProc, setHistLen, refresh } from '../core/state.js';
 import { updateScene, updateSendButtonLLM } from './scene.js';
 import { applyTrimColor } from './chat-settings.js';
+import { cancelPendingSave } from '../views/chat.js';
 
 export async function populateChatDropdown() {
     const { chatSelect } = getElements();
@@ -34,6 +35,7 @@ export async function handleChatChange() {
     if (!selectedChat) return;
     
     try {
+        cancelPendingSave();  // Prevent stale save from overwriting new chat's settings
         audio.stop();
         // activateChat already returns settings - no need for separate getChatSettings call
         const result = await api.activateChat(selectedChat);

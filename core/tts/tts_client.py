@@ -447,7 +447,9 @@ class TTSClient:
             logger.error(f"Error in TTS playback: {e}", exc_info=True)
         finally:
             with self.lock:
+                was_playing = self._is_playing
                 self._is_playing = False
+            if was_playing:
                 publish(Events.TTS_STOPPED)
             gc.collect()
 

@@ -802,6 +802,12 @@ function debouncedSave(container) {
     saveTimer = setTimeout(() => saveSettings(container), SAVE_DEBOUNCE);
 }
 
+/** Cancel any pending debounced save — called on chat switch to prevent cross-chat writes */
+export function cancelPendingSave() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+}
+
 async function saveSettings(container) {
     const chatSelect = getElements().chatSelect || document.getElementById('chat-select');
     const chatName = chatSelect?.value;
