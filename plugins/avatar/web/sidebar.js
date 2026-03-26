@@ -5,6 +5,7 @@ import { triggerSendWithText, handleStop } from '/static/handlers/send-handlers.
 import { createEnvironment } from './environment.js';
 import { createCameraOrbitSystem } from './camera-orbits.js';
 import { createPlayerController } from './player-controller.js';
+import { createMissileCommand } from './missile-command.js';
 
 const THREE_CDN = 'https://esm.sh/three@0.170.0';
 const GLTF_CDN = 'https://esm.sh/three@0.170.0/addons/loaders/GLTFLoader.js';
@@ -92,6 +93,7 @@ export async function init(container) {
     let _onDisplayModeChange = null;  // set after scene is ready
     let _isPlayerMode = () => false;   // set after player controller is created
     let _setPlayerMode = null;        // set after player controller is created
+    let _stopGame = null;             // set after game is created
 
     function setDisplayMode(mode) {
         if (mode === displayMode) return;
@@ -461,6 +463,7 @@ export async function init(container) {
     const btnPlayer = container.querySelector('#avatar-btn-player');
     function setPlayerMode(on) {
         if (on === playerCtrl.isEnabled()) return;
+        if (!on && _stopGame) _stopGame();
         playerCtrl.toggle();
         btnPlayer?.classList.toggle('player-active', on);
         displayEl.classList.toggle('player-mode', on);
@@ -483,6 +486,23 @@ export async function init(container) {
         setPlayerMode(true);
     };
     document.addEventListener('keydown', _onPlayerAutoActivate);
+
+    // Missile Command game
+    const missileGame = createMissileCommand(scene, THREE, camera, canvas, eventBus.dispatch);
+    _stopGame = () => { if (missileGame.isActive()) missileGame.stop(); };
+
+    const _onGameKey = (e) => {
+        if (e.code !== 'KeyG') return;
+        if (displayMode === 'sidebar') return;
+        if (!playerCtrl.isEnabled()) return;  // must be in player mode
+        e.preventDefault();
+        if (missileGame.isActive()) {
+            missileGame.stop();
+        } else {
+            missileGame.start(displayEl);
+        }
+    };
+    document.addEventListener('keydown', _onGameKey);
 
     // Double-click to reset camera (only in orbit mode)
     canvas.addEventListener('dblclick', () => {
@@ -772,6 +792,7 @@ export async function init(container) {
             orbitSystem.update(delta);
             controls.update();
         }
+        missileGame.update(delta);
         resize();
         renderer.render(scene, camera);
     }
@@ -787,6 +808,8 @@ export async function init(container) {
         unsubs.forEach(fn => fn());
         _chatUnsubs.forEach(fn => fn());
         document.removeEventListener('keydown', _onPlayerAutoActivate);
+        document.removeEventListener('keydown', _onGameKey);
+        missileGame.cleanup();
         playerCtrl.cleanup();
         orbitSystem.cleanup();
         controls.dispose();

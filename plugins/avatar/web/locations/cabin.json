@@ -20,7 +20,8 @@
         { "type": "chair",     "position": [-1.5, 0, -7] },
         { "type": "chair",     "position": [1.5, 0, -7] },
         { "type": "table",     "position": [0, 0, -7], "options": { "style": "round", "books": true } },
-        { "type": "bed",       "position": [8, 0, -8] }
+        { "type": "bed",       "position": [8, 0, -8] },
+        { "type": "arcade",    "position": [5, 0, -2], "rotation": -30 }
     ],
     "hotspots": [
         { "name": "fireside", "position": [-5, 0, -5.5], "facing": [-6, 0, -8] },

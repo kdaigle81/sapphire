@@ -326,6 +326,52 @@ function createPlatform(THREE, opts = {}) {
 }
 
 // ═══════════════════════════════════════════
+// ARCADE CABINET
+// ═══════════════════════════════════════════
+function createArcade(THREE, opts = {}) {
+    const g = new THREE.Group();
+
+    // Cabinet body
+    g.add(box(THREE, 0.9, 1.8, 0.8, 0x1a1a2a, 0.85)).position.set(0, 0.9, 0);
+    // Screen bezel
+    g.add(box(THREE, 0.7, 0.5, 0.05, 0x111111, 0.9)).position.set(0, 1.35, 0.41);
+    // Screen (emissive)
+    const screen = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.6, 0.4),
+        new THREE.MeshBasicMaterial({ color: 0x4a9eff, transparent: true, opacity: 0.8 })
+    );
+    screen.position.set(0, 1.35, 0.44);
+    g.add(screen);
+    // Control panel (angled)
+    const panel = box(THREE, 0.7, 0.05, 0.35, 0x222233, 0.8);
+    panel.position.set(0, 1.0, 0.5);
+    panel.rotation.x = -0.3;
+    g.add(panel);
+    // Joystick
+    g.add(cyl(THREE, 0.02, 0.02, 0.08, 6, 0xff3333, 0.5)).position.set(-0.1, 1.07, 0.52);
+    g.add(cyl(THREE, 0.03, 0.03, 0.02, 8, 0xff3333, 0.5)).position.set(-0.1, 1.12, 0.52);
+    // Buttons
+    for (let i = 0; i < 3; i++) {
+        g.add(cyl(THREE, 0.025, 0.025, 0.015, 8, [0x44ff44, 0xff4444, 0x4444ff][i], 0.5))
+            .position.set(0.05 + i * 0.07, 1.06, 0.52);
+    }
+    // Screen glow
+    const glow = new THREE.PointLight(0x4a9eff, 0.3, 3);
+    glow.position.set(0, 1.35, 0.6);
+    g.add(glow);
+
+    let _t = 0;
+    return {
+        group: g,
+        update(delta) {
+            _t += delta;
+            screen.material.color.setHex(_t % 2 < 1 ? 0x4a9eff : 0x3a8eef);  // subtle pulse
+            glow.intensity = 0.2 + Math.sin(_t * 2) * 0.1;
+        },
+    };
+}
+
+// ═══════════════════════════════════════════
 // REGISTRY
 // ═══════════════════════════════════════════
 export const OBJECTS = {
@@ -339,4 +385,5 @@ export const OBJECTS = {
     tree:       createTree,
     rock:       createRock,
     platform:   createPlatform,
+    arcade:     createArcade,
 };
