@@ -504,6 +504,31 @@ export async function init(container) {
         // Enable avatar shadow casting for environment
         env.enableAvatarShadows(gltf.scene);
 
+        // Load configured location + populate selector
+        const configuredLocation = avatarConfig.active_location || 'cabin';
+        env.setLocation(configuredLocation);
+
+        const locationSelect = container.querySelector('#avatar-location-select');
+        if (locationSelect) {
+            for (const loc of env.listLocations()) {
+                const opt = document.createElement('option');
+                opt.value = loc.name;
+                opt.textContent = loc.name[0].toUpperCase() + loc.name.slice(1);
+                if (loc.name === configuredLocation) opt.selected = true;
+                locationSelect.appendChild(opt);
+            }
+            locationSelect.addEventListener('change', async () => {
+                const name = locationSelect.value;
+                await env.setLocation(name);
+                // Save to config
+                fetch('/api/plugin/avatar/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ active_location: name }),
+                });
+            });
+        }
+
         // Wire environment toggle to display mode changes
         _onDisplayModeChange = (mode) => {
             const expanded = mode !== 'sidebar';

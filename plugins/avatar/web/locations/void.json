@@ -1,0 +1,12 @@
+{
+    "name": "void",
+    "label": "The Void",
+    "description": "Minimal dark space — just Sapphire and the stars",
+    "sky": { "timeOfDay": false, "topColor": "#060610", "bottomColor": "#0a0a18" },
+    "floor": { "color": "#0d0d1a", "grid": true, "fadeStart": 6, "fadeEnd": 20 },
+    "glowRing": true,
+    "objects": [],
+    "hotspots": [
+        { "name": "center", "position": [0, 0, 0], "facing": [0, 0, -3] }
+    ]
+}

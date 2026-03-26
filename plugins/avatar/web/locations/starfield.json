@@ -1,0 +1,23 @@
+{
+    "name": "starfield",
+    "label": "Starfield Station",
+    "description": "A floating platform in deep space",
+    "sky": { "timeOfDay": false, "topColor": "#020208", "bottomColor": "#0a0818", "stars": 500 },
+    "floor": { "hide": true },
+    "glowRing": false,
+    "lights": [
+        { "position": [0, 3, 0], "color": "#4a9eff", "dayIntensity": 0.4, "nightIntensity": 0.4, "radius": 12, "label": "station core" },
+        { "position": [0, 0.5, 0], "color": "#4a9eff", "dayIntensity": 0.15, "nightIntensity": 0.15, "radius": 8, "label": "platform underglow" }
+    ],
+    "objects": [
+        { "type": "platform", "position": [0, 0, 0], "options": { "radius": 8, "color": "#12121e", "glowColor": "#4a9eff" } },
+        { "type": "table",    "position": [3, 0, -3], "options": { "style": "round" } },
+        { "type": "chair",    "position": [2, 0, -2.5] },
+        { "type": "chair",    "position": [4, 0, -2.5] }
+    ],
+    "hotspots": [
+        { "name": "center",  "position": [0, 0, 0],    "facing": [0, 0, -3] },
+        { "name": "edge",    "position": [5, 0, 0],    "facing": [8, 0, 0] },
+        { "name": "sitting", "position": [3, 0, -2],   "facing": [3, 0, -3] }
+    ]
+}

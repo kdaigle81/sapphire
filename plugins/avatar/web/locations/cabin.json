@@ -1,0 +1,33 @@
+{
+    "name": "cabin",
+    "label": "Lakeside Cabin",
+    "description": "A warm cabin by the lake with a fireplace, couch, and a view",
+    "sky": { "timeOfDay": true },
+    "floor": { "color": "#1a1a2a", "grid": true, "fadeStart": 12, "fadeEnd": 40 },
+    "glowRing": true,
+    "dustMotes": { "count": 60, "center": [0, 1.5, -5], "spread": [6, 3, 8] },
+    "lights": [
+        { "position": [-1, 3.5, 0],  "color": "#ffcc88", "dayIntensity": 0.2,  "nightIntensity": 1.8, "radius": 18, "label": "main ceiling" },
+        { "position": [4, 3.5, -3],  "color": "#ffeedd", "dayIntensity": 0.15, "nightIntensity": 1.2, "radius": 15, "label": "right ceiling" },
+        { "position": [0, 2.5, -8],  "color": "#aaccff", "dayIntensity": 0.15, "nightIntensity": 0.9, "radius": 12, "label": "window ambient" },
+        { "position": [-5, 2, -5],   "color": "#ffaa66", "dayIntensity": 0.1,  "nightIntensity": 1.0, "radius": 10, "label": "fireside sconce" }
+    ],
+    "objects": [
+        { "type": "fireplace", "position": [-6, 0, -8] },
+        { "type": "couch",     "position": [-5, 0, -3.5] },
+        { "type": "minibar",   "position": [-10, 0, -2] },
+        { "type": "window",    "position": [0, 0, -10], "options": { "width": 5, "height": 3.5 } },
+        { "type": "chair",     "position": [-1.5, 0, -7] },
+        { "type": "chair",     "position": [1.5, 0, -7] },
+        { "type": "table",     "position": [0, 0, -7], "options": { "style": "round", "books": true } },
+        { "type": "bed",       "position": [8, 0, -8] }
+    ],
+    "hotspots": [
+        { "name": "fireside", "position": [-5, 0, -5.5], "facing": [-6, 0, -8] },
+        { "name": "couch",    "position": [-4, 0, -3],   "facing": [-6, 0, -8] },
+        { "name": "window",   "position": [0, 0, -7.5],  "facing": [0, 0, -10] },
+        { "name": "bar",      "position": [-9, 0, -1],   "facing": [-10, 0, -2] },
+        { "name": "bed",      "position": [7, 0, -7],    "facing": [8, 0, -8] },
+        { "name": "center",   "position": [0, 0, 0],     "facing": [0, 0, -5] }
+    ]
+}

@@ -1,0 +1,30 @@
+{
+    "name": "garden",
+    "label": "Garden",
+    "description": "A peaceful garden with trees, rocks, and fireflies at night",
+    "sky": { "timeOfDay": true },
+    "floor": { "color": "#1a2a1a", "grid": false, "fadeStart": 15, "fadeEnd": 45 },
+    "glowRing": false,
+    "dustMotes": { "count": 80, "center": [0, 1, 0], "spread": [10, 2, 10], "color": "#aaffaa", "nightOnly": true },
+    "lights": [
+        { "position": [0, 3, -2], "color": "#ddeeff", "dayIntensity": 0.05, "nightIntensity": 0.4, "radius": 10, "label": "garden moonlight" }
+    ],
+    "objects": [
+        { "type": "tree",  "position": [-5, 0, -6],  "options": { "height": 4 } },
+        { "type": "tree",  "position": [-8, 0, -3],  "options": { "height": 3, "canopyColor": "#2a7a3a" } },
+        { "type": "tree",  "position": [6, 0, -7],   "options": { "height": 5, "canopyColor": "#1a5a2a" } },
+        { "type": "tree",  "position": [9, 0, -2],   "options": { "height": 2.5 } },
+        { "type": "rock",  "position": [-3, 0, -4],  "options": { "scale": 1.2 } },
+        { "type": "rock",  "position": [2, 0, -5],   "options": { "scale": 0.8, "color": "#4a4a4a" } },
+        { "type": "rock",  "position": [4, 0, -3],   "options": { "scale": 0.5 } },
+        { "type": "chair", "position": [-1, 0, -3],  "options": { "color": "#5a5a4a" } },
+        { "type": "chair", "position": [1, 0, -3],   "options": { "color": "#5a5a4a" } },
+        { "type": "table", "position": [0, 0, -3],   "options": { "style": "round" } }
+    ],
+    "hotspots": [
+        { "name": "center",   "position": [0, 0, 0],    "facing": [0, 0, -3] },
+        { "name": "trees",    "position": [-4, 0, -5],  "facing": [-5, 0, -6] },
+        { "name": "sitting",  "position": [0, 0, -2.5], "facing": [0, 0, -5] },
+        { "name": "clearing", "position": [3, 0, 1],    "facing": [0, 0, 0] }
+    ]
+}
