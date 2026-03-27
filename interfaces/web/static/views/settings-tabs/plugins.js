@@ -211,6 +211,7 @@ export default {
                 <div class="pm-header-top">
                     <div class="pm-summary">Plugins <span class="pm-count-total">${counts.all} total \u00b7 ${counts.enabled} enabled</span></div>
                     <div class="pm-header-actions">
+                        <button class="btn btn-sm pm-action-btn" id="check-all-updates-btn">\uD83D\uDD0D Check Updates</button>
                         <button class="btn btn-sm pm-action-btn" id="rescan-plugins-btn">\uD83D\uDD04 Rescan</button>
                         <button class="btn btn-sm btn-primary pm-action-btn" id="pm-install-toggle">+ Install Plugin</button>
                     </div>
@@ -321,6 +322,56 @@ export default {
                     rescanBtn.disabled = false;
                     rescanBtn.textContent = 'Rescan';
                 }
+            });
+        }
+
+        // Check All Updates button
+        const checkAllBtn = el.querySelector('#check-all-updates-btn');
+        if (checkAllBtn) {
+            checkAllBtn.addEventListener('click', async () => {
+                // Find all user-installed plugins (they have Update buttons)
+                const updateBtns = el.querySelectorAll('.plugin-update-btn');
+                if (!updateBtns.length) {
+                    ui.showToast('No user-installed plugins to check', 'info');
+                    return;
+                }
+                checkAllBtn.disabled = true;
+                checkAllBtn.textContent = 'Checking...';
+                let updatesFound = 0;
+                const results = await Promise.allSettled(
+                    Array.from(updateBtns).map(async (btn) => {
+                        const name = btn.dataset.plugin;
+                        try {
+                            const result = await pluginsAPI.checkUpdate(name);
+                            if (result.update_available) {
+                                updatesFound++;
+                                btn.textContent = `Update to v${result.remote_version}`;
+                                btn.classList.add('btn-primary');
+                                btn.classList.remove('plugin-update-btn');
+                                btn.addEventListener('click', async () => {
+                                    btn.disabled = true;
+                                    btn.textContent = 'Updating...';
+                                    try {
+                                        await pluginsAPI.installPlugin({ url: result.source_url, force: true });
+                                        ui.showToast(`Updated ${name} → v${result.remote_version}`, 'success');
+                                        await ctx.refreshTab();
+                                    } catch (err) {
+                                        ui.showToast(`Update failed: ${err.message}`, 'error', 5000);
+                                        btn.disabled = false;
+                                        btn.textContent = `Update to v${result.remote_version}`;
+                                    }
+                                }, { once: true });
+                            }
+                        } catch { /* skip failed checks */ }
+                    })
+                );
+                if (updatesFound > 0) {
+                    ui.showToast(`${updatesFound} update${updatesFound > 1 ? 's' : ''} available`, 'success');
+                } else {
+                    ui.showToast('All plugins up to date', 'success');
+                }
+                checkAllBtn.disabled = false;
+                checkAllBtn.textContent = 'Check Updates';
             });
         }
 
