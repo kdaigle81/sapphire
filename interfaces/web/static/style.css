@@ -2647,10 +2647,14 @@ div.hb-response-summary {
 /* Dashboard grid */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
-    max-width: 600px;
+    max-width: 900px;
 }
+@media (max-width: 900px) { .dashboard-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .dashboard-grid { grid-template-columns: 1fr; } }
+.dash-card-2col { grid-column: span 2; }
+@media (max-width: 600px) { .dash-card-2col { grid-column: span 1; } }
 .dash-card {
     padding: 16px;
     border: 1px solid var(--border);

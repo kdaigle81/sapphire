@@ -28,9 +28,27 @@ export default {
                     <div class="dash-update-actions" id="dash-update-actions"></div>
                 </div>
                 <div class="dash-card">
+                    <h4>Quick Stats</h4>
+                    <div id="dash-quick-stats" class="dash-quick-stats">
+                        <span class="text-muted" style="font-size:var(--font-sm)">Loading...</span>
+                    </div>
+                </div>
+                <div class="dash-card">
+                    <h4>Backups</h4>
+                    <div id="dash-backup-status" class="text-muted" style="font-size:var(--font-sm);margin:0 0 8px">Checking...</div>
+                    <button class="btn-primary btn-sm" id="dash-backup-now">Backup Now</button>
+                </div>
+                <div class="dash-card">
                     <h4>Help</h4>
-                    <p class="text-muted" style="font-size:var(--font-sm);margin:0 0 8px">Guides, shortcuts, and troubleshooting</p>
+                    <p class="text-muted" style="font-size:var(--font-sm);margin:0 0 8px">Guides and troubleshooting</p>
                     <button class="btn-primary btn-sm" id="dash-help">Open Help</button>
+                </div>
+                <div class="dash-card">
+                    <h4>Maintenance</h4>
+                    <div class="dash-controls" style="flex-direction:column;gap:6px">
+                        <button class="btn-sm" id="dash-force-update" style="width:100%">Force Update (git pull)</button>
+                        <button class="btn-sm" id="dash-clear-cache" style="width:100%">Clear JS Cache</button>
+                    </div>
                 </div>
                 <div class="dash-card dash-card-wide">
                     <div class="dash-card-header">
@@ -53,6 +71,65 @@ export default {
         // Help button
         el.querySelector('#dash-help')?.addEventListener('click', () => {
             import('../../core/router.js').then(r => r.switchView('help'));
+        });
+
+        // Quick stats
+        loadQuickStats(el);
+
+        // Force update
+        el.querySelector('#dash-force-update')?.addEventListener('click', async () => {
+            const btn = el.querySelector('#dash-force-update');
+            if (!confirm('Pull latest code from git? Sapphire will restart after.')) return;
+            btn.disabled = true;
+            btn.textContent = 'Updating...';
+            try {
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+                const res = await fetch('/api/system/update', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (data.status === 'updated') {
+                    ui.showToast('Updated! Restarting...', 'success');
+                    setTimeout(() => pollForRestart(), 2000);
+                } else {
+                    ui.showToast(data.message || 'Already up to date', 'success');
+                    btn.disabled = false;
+                    btn.textContent = 'Force Update (git pull)';
+                }
+            } catch (e) {
+                ui.showToast(`Update failed: ${e.message}`, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Force Update (git pull)';
+            }
+        });
+
+        // Clear JS cache
+        el.querySelector('#dash-clear-cache')?.addEventListener('click', () => {
+            if ('caches' in window) {
+                caches.keys().then(names => names.forEach(n => caches.delete(n)));
+            }
+            ui.showToast('Cache cleared — reloading...', 'success');
+            setTimeout(() => window.location.reload(true), 500);
+        });
+
+        // Backup
+        loadBackupStatus(el);
+        el.querySelector('#dash-backup-now')?.addEventListener('click', async () => {
+            const btn = el.querySelector('#dash-backup-now');
+            btn.disabled = true;
+            btn.textContent = 'Backing up...';
+            try {
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+                const res = await fetch('/api/backup/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                    body: JSON.stringify({ type: 'manual' })
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                ui.showToast(`Backup created: ${data.filename || 'done'}`, 'success');
+                loadBackupStatus(el);
+            } catch (e) { ui.showToast(`Backup failed: ${e.message}`, 'error'); }
+            finally { btn.disabled = false; btn.textContent = 'Backup Now'; }
         });
 
         // Restart
@@ -176,6 +253,77 @@ function pollForRestart() {
     poll();
 }
 
+
+// =============================================================================
+// QUICK STATS
+// =============================================================================
+
+async function loadQuickStats(el) {
+    const box = el.querySelector('#dash-quick-stats');
+    if (!box) return;
+    try {
+        const res = await fetch('/api/status');
+        if (!res.ok) { box.innerHTML = '<span class="text-muted" style="font-size:var(--font-sm)">Unavailable</span>'; return; }
+        const data = await res.json();
+        const chat = data.active_chat || '?';
+        const msgs = data.history_length || 0;
+        const ctx = data.context || {};
+        const tts = data.tts_state || {};
+        const stt = data.stt_state || {};
+
+        box.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:4px;font-size:var(--font-sm)">
+                <div><span class="text-muted">Chat:</span> ${_esc(chat)} (${msgs} msgs)</div>
+                <div><span class="text-muted">Context:</span> ${ctx.percent || 0}% used${ctx.limit ? ` (${(ctx.used||0).toLocaleString()}/${ctx.limit.toLocaleString()})` : ''}</div>
+                <div><span class="text-muted">TTS:</span> ${tts.speaking ? '<span style="color:#4caf50">Speaking</span>' : 'Idle'}</div>
+                <div><span class="text-muted">STT:</span> ${stt.recording ? '<span style="color:#4fc3f7">Recording</span>' : 'Idle'}</div>
+            </div>
+        `;
+    } catch { box.innerHTML = '<span class="text-muted" style="font-size:var(--font-sm)">Stats unavailable</span>'; }
+}
+
+function _esc(s) { return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// =============================================================================
+// BACKUP STATUS
+// =============================================================================
+
+async function loadBackupStatus(el) {
+    const statusEl = el.querySelector('#dash-backup-status');
+    if (!statusEl) return;
+    try {
+        const res = await fetch('/api/backup/list');
+        if (!res.ok) { statusEl.textContent = 'Could not check backups'; return; }
+        const data = await res.json();
+        const backups = data.backups || {};
+        const all = [...(backups.daily || []), ...(backups.weekly || []), ...(backups.monthly || []), ...(backups.manual || [])];
+        if (all.length === 0) {
+            statusEl.textContent = 'No backups yet';
+        } else {
+            // Sort by date+time string (format: YYYY-MM-DD + HHMMSS)
+            all.sort((a, b) => (`${b.date}_${b.time}`).localeCompare(`${a.date}_${a.time}`));
+            const latest = all[0];
+            const ago = _backupTimeAgo(latest.date, latest.time);
+            const sizeMB = latest.size ? ` \u00b7 ${(latest.size / 1048576).toFixed(0)} MB` : '';
+            statusEl.textContent = `${all.length} backups \u00b7 Latest: ${ago}${sizeMB}`;
+        }
+    } catch { statusEl.textContent = 'Backup status unavailable'; }
+}
+
+function _backupTimeAgo(dateStr, timeStr) {
+    if (!dateStr) return 'unknown';
+    // Parse "2026-03-27" + "030000" → ms since epoch
+    const h = timeStr?.slice(0, 2) || '00', m = timeStr?.slice(2, 4) || '00', s = timeStr?.slice(4, 6) || '00';
+    const parts = dateStr.split('-');
+    const d = new Date(+parts[0], +parts[1] - 1, +parts[2], +h, +m, +s);
+    if (isNaN(d.getTime())) return dateStr;
+    const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (sec < 0) return 'just now';
+    if (sec < 60) return 'just now';
+    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+    return `${Math.floor(sec / 86400)}d ago`;
+}
 
 // =============================================================================
 // TOKEN METRICS
