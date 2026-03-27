@@ -110,7 +110,13 @@ function closeApp(container) {
 
 export default {
     init(el) {
-        // Nothing — load on show
+        // Listen for nav clicks on the Apps item while already on Apps view
+        // (switchView returns early when currentView === viewId, so show() doesn't fire)
+        document.querySelector('[data-view="apps"]')?.addEventListener('click', () => {
+            if (activeApp) {
+                closeApp(document.getElementById('view-apps'));
+            }
+        });
     },
 
     async show() {
@@ -122,7 +128,7 @@ export default {
         const hash = location.hash;
         const appMatch = hash.match(/^#apps\/(.+)$/);
         if (appMatch && appsData.find(a => a.name === appMatch[1])) {
-            renderGrid(el); // render grid first for back button context
+            renderGrid(el);
             await openApp(appMatch[1], el);
         } else {
             renderGrid(el);

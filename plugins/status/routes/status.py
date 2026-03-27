@@ -19,6 +19,17 @@ def _is_docker():
         return False
 
 
+def _get_git_branch():
+    try:
+        head = Path(__file__).parent.parent.parent.parent / '.git' / 'HEAD'
+        content = head.read_text().strip()
+        if content.startswith('ref: refs/heads/'):
+            return content.replace('ref: refs/heads/', '')
+        return content[:8]  # detached HEAD
+    except Exception:
+        return ''
+
+
 async def get_full_status(**kwargs):
     """GET /api/plugin/status/full — comprehensive system snapshot."""
     try:
@@ -37,6 +48,7 @@ async def get_full_status(**kwargs):
             "docker": _is_docker(),
             "uptime_seconds": int(time.time() - _boot_time),
             "hostname": platform.node(),
+            "branch": _get_git_branch(),
         }
 
         # Active session
@@ -59,6 +71,15 @@ async def get_full_status(**kwargs):
         wakeword_on = getattr(config, 'WAKE_WORD_ENABLED', False)
         embedding_provider = getattr(config, 'EMBEDDING_PROVIDER', 'local')
 
+        # SOCKS proxy
+        socks_enabled = getattr(config, 'SOCKS_ENABLED', False)
+        socks_has_creds = False
+        try:
+            from core.credentials_manager import credentials
+            socks_has_creds = credentials.has_socks_credentials()
+        except Exception:
+            pass
+
         services = {
             "tts": {
                 "provider": tts_provider,
@@ -77,6 +98,10 @@ async def get_full_status(**kwargs):
                 "provider": embedding_provider,
                 "enabled": bool(embedding_provider and embedding_provider != 'none'),
             },
+            "socks": {
+                "enabled": socks_enabled,
+                "has_credentials": socks_has_creds,
+            },
         }
 
         # Daemons
@@ -94,24 +119,23 @@ async def get_full_status(**kwargs):
         # LLM Providers
         providers = []
         try:
+            all_pconfig = {**dict(getattr(config, 'LLM_PROVIDERS', {})), **dict(getattr(config, 'LLM_CUSTOM_PROVIDERS', {}))}
             from core.chat.llm_providers import provider_registry
-            for key, entry in {**provider_registry._core, **provider_registry._plugins}.items():
-                pconfig = {}
-                all_providers = {**dict(getattr(config, 'LLM_PROVIDERS', {})), **dict(getattr(config, 'LLM_CUSTOM_PROVIDERS', {}))}
-                if key in all_providers:
-                    pconfig = all_providers[key]
+            all_registry = {**provider_registry._core, **provider_registry._plugins}
+            for key, pconfig in all_pconfig.items():
+                reg = all_registry.get(key, {})
                 providers.append({
                     "key": key,
-                    "name": entry.get("display_name", key),
+                    "name": reg.get("display_name") or pconfig.get("display_name", key),
                     "enabled": pconfig.get("enabled", False),
-                    "is_local": entry.get("is_local", False),
-                    "has_key": bool(pconfig.get("api_key") or _check_provider_key(key)),
+                    "is_local": reg.get("is_local", pconfig.get("is_local", False)),
+                    "has_key": bool(_check_provider_key(key)),
                 })
         except Exception as e:
             logger.debug(f"Provider listing failed: {e}")
 
-        # Tasks
-        tasks_info = {"total": 0, "enabled": 0, "running": 0}
+        # Tasks (with type breakdown)
+        tasks_info = {"total": 0, "enabled": 0, "running": 0, "tasks": 0, "heartbeats": 0, "daemons": 0, "webhooks": 0}
         try:
             if hasattr(system, 'continuity_scheduler') and system.continuity_scheduler:
                 sched = system.continuity_scheduler
@@ -119,6 +143,16 @@ async def get_full_status(**kwargs):
                 tasks_info["total"] = len(all_tasks)
                 tasks_info["enabled"] = sum(1 for t in all_tasks if t.get("enabled"))
                 tasks_info["running"] = sum(1 for t in all_tasks if t.get("running"))
+                for t in all_tasks:
+                    tt = t.get("type", "task")
+                    if tt == "heartbeat":
+                        tasks_info["heartbeats"] += 1
+                    elif tt == "daemon":
+                        tasks_info["daemons"] += 1
+                    elif tt == "webhook":
+                        tasks_info["webhooks"] += 1
+                    else:
+                        tasks_info["tasks"] += 1
         except Exception:
             pass
 

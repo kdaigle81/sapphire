@@ -1,6 +1,8 @@
-# 2.4.7 - Theme Expansion
+# 2.4.8 - Theme Expansion
 - Themes switcher enhanced
 - Allow theme folders
+# 2.4.7 - Missile Command
+- Sapphire said no changelog, easter egg (it's boring/bad)
 # 2.4.6 - Plugin Expansion
 - Added Apps page for plugins
 - Click a plugin for its custom JS

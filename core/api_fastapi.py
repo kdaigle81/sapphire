@@ -94,11 +94,24 @@ USER_PLUGINS_DIR_WEB = PROJECT_ROOT / "user" / "plugins"
 import mimetypes
 @app.get("/plugin-web/{plugin_name}/{path:path}")
 async def serve_plugin_web(plugin_name: str, path: str, _=Depends(require_login)):
-    """Serve web assets from plugin web/ directories."""
+    """Serve web assets from plugin web/ and app/ directories.
+    /plugin-web/{name}/foo.js     → {plugin}/web/foo.js  (existing behavior)
+    /plugin-web/{name}/app/foo.js → {plugin}/app/foo.js  (app pages)
+    """
     for base_dir in [SYSTEM_PLUGINS_DIR, USER_PLUGINS_DIR_WEB]:
-        web_dir = (base_dir / plugin_name / "web").resolve()
+        plugin_dir = (base_dir / plugin_name).resolve()
+
+        # If path starts with app/, serve from app/ directory directly
+        if path.startswith("app/"):
+            file_path = (plugin_dir / path).resolve()
+            if str(file_path).startswith(str(plugin_dir)) and file_path.exists() and file_path.is_file():
+                content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+                return FileResponse(file_path, media_type=content_type)
+            continue
+
+        # Otherwise serve from web/ subdirectory (existing behavior)
+        web_dir = (plugin_dir / "web").resolve()
         file_path = (web_dir / path).resolve()
-        # Security: ensure path doesn't escape web/ dir
         if not str(file_path).startswith(str(web_dir)):
             continue
         if file_path.exists() and file_path.is_file():
