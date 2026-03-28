@@ -223,6 +223,12 @@ async def toggle_plugin(plugin_name: str, request: Request, _=Depends(require_lo
                     toolset_info = system.llm_chat.function_manager.get_current_toolset_info()
                     toolset_name = toolset_info.get("name", "custom")
                     system.llm_chat.function_manager.update_enabled_functions([toolset_name])
+                    from core.event_bus import publish, Events
+                    publish(Events.TOOLSET_CHANGED, {
+                        "name": toolset_name,
+                        "action": "plugin_toggle",
+                        "function_count": toolset_info.get("function_count", 0)
+                    })
             except Exception:
                 pass  # Best-effort; tools will sync on next chat
     except HTTPException:

@@ -92,17 +92,15 @@ class AgentManager:
             agent_id = uuid.uuid4().hex[:8]
             name = self._next_name(agent_type)
 
-        worker = type_info['factory'](
-            agent_id=agent_id,
-            name=name,
-            mission=mission,
-            chat_name=chat_name,
-            on_complete=self._check_batch_complete,
-            **kwargs
-        )
-        worker._agent_type = agent_type
-
-        with self._lock:
+            worker = type_info['factory'](
+                agent_id=agent_id,
+                name=name,
+                mission=mission,
+                chat_name=chat_name,
+                on_complete=self._check_batch_complete,
+                **kwargs
+            )
+            worker._agent_type = agent_type
             worker.status = 'running'
             self._agents[agent_id] = worker
 

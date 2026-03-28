@@ -53,8 +53,10 @@ def _migrate_prompt_pieces():
                 changed = True
 
         if changed:
-            with open(path, 'w', encoding='utf-8') as f:
+            tmp = path.with_suffix('.tmp')
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+            tmp.replace(path)
             logger.info("Migrated prompt_pieces.json: persona -> character")
     except Exception as e:
         logger.error(f"Migration failed for prompt_pieces.json: {e}")
@@ -94,8 +96,10 @@ def _migrate_user_prompts():
                     changed = True
 
             if changed:
-                with open(path, 'w', encoding='utf-8') as f:
+                tmp = path.with_suffix('.tmp')
+                with open(tmp, 'w', encoding='utf-8') as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
+                tmp.replace(path)
                 logger.info(f"Migrated {path.name}: persona -> character")
         except Exception as e:
             logger.warning(f"Could not migrate {path.name}: {e}")
@@ -127,8 +131,10 @@ def migrate_stt_to_provider():
                 data.pop('STT_ENABLED', None)
                 data.pop('STT_ENGINE', None)
                 data['stt'] = stt
-                with open(settings_path, 'w', encoding='utf-8') as f:
+                tmp = settings_path.with_suffix('.tmp')
+                with open(tmp, 'w', encoding='utf-8') as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
+                tmp.replace(settings_path)
                 logger.info("Cleaned up root-level STT keys (already migrated)")
             return
 
@@ -148,8 +154,10 @@ def migrate_stt_to_provider():
         data.pop('STT_ENGINE', None)
         data['stt'] = stt
 
-        with open(settings_path, 'w', encoding='utf-8') as f:
+        tmp = settings_path.with_suffix('.tmp')
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        tmp.replace(settings_path)
         logger.info(f"Migrated STT settings: enabled={was_enabled} engine={engine} → provider={stt['STT_PROVIDER']}")
     except Exception as e:
         logger.error(f"STT settings migration failed: {e}")
@@ -180,8 +188,10 @@ def migrate_tts_to_provider():
             if 'TTS_ENABLED' in data:
                 data.pop('TTS_ENABLED', None)
                 data['tts'] = tts
-                with open(settings_path, 'w', encoding='utf-8') as f:
+                tmp = settings_path.with_suffix('.tmp')
+                with open(tmp, 'w', encoding='utf-8') as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
+                tmp.replace(settings_path)
                 logger.info("Cleaned up root-level TTS keys (already migrated)")
             return
 
@@ -198,8 +208,10 @@ def migrate_tts_to_provider():
         data.pop('TTS_ENABLED', None)
         data['tts'] = tts
 
-        with open(settings_path, 'w', encoding='utf-8') as f:
+        tmp = settings_path.with_suffix('.tmp')
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        tmp.replace(settings_path)
         logger.info(f"Migrated TTS settings: enabled={was_enabled} → provider={tts['TTS_PROVIDER']}")
     except Exception as e:
         logger.error(f"TTS settings migration failed: {e}")

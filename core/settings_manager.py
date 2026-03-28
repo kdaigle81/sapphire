@@ -25,7 +25,7 @@ class SettingsManager:
         self._config = {}
         self._runtime = {}  # Non-persisted runtime overrides (survive file reload)
         self._reload_callbacks = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         
         # File watcher state
         self._watcher_thread = None

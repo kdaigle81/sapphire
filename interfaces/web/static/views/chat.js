@@ -94,6 +94,9 @@ export default {
         eventBus.on(eventBus.Events.PROMPT_CHANGED, () => loadSidebar());
         eventBus.on(eventBus.Events.PROMPT_DELETED, () => loadSidebar());
 
+        // Refresh spice dropdown when spice sets change
+        eventBus.on(eventBus.Events.SPICE_CHANGED, () => loadSidebar());
+
         // Accordion headers in sidebar (event delegation — handles core + plugin accordions)
         const sbFull = container.querySelector('.sb-full-content');
         if (sbFull) sbFull.addEventListener('click', e => {

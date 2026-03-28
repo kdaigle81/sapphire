@@ -124,9 +124,17 @@ async def reload_settings(request: Request, _=Depends(require_login)):
 
 @router.post("/api/settings/reset")
 async def reset_settings(request: Request, _=Depends(require_login)):
-    """Reset all settings to defaults."""
+    """Reset all settings to defaults and re-init providers."""
     from core.settings_manager import settings
     if settings.reset_to_defaults():
+        # Re-init providers so runtime matches the reset config
+        try:
+            system = get_system()
+            await asyncio.to_thread(system.toggle_wakeword, False)
+            await asyncio.to_thread(system.switch_tts_provider, 'none')
+            await asyncio.to_thread(system.switch_stt_provider, 'none')
+        except Exception as e:
+            logger.warning(f"Provider re-init after reset: {e}")
         return {"status": "success", "message": "All settings reset to defaults"}
     else:
         raise HTTPException(status_code=500, detail="Failed to reset settings")
