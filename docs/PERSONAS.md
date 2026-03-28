@@ -123,7 +123,7 @@ ACTIVATION:
 - Voice, prompt, toolset all apply immediately
 
 STORAGE:
-- Built-in: core/modules/system/personas/personas.json
+- Built-in: core/personas/personas.json
 - User: user/personas/personas.json (overrides built-in)
 - Avatars: user/personas/avatars/
 

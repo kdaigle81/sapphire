@@ -14,7 +14,7 @@ main.py (runner with restart loop)
     │   ├── plugin_loader → plugins/*, user/plugins/*
     │   ├── function_manager → functions/*, scopes, story tools
     │   └── session_manager → chat history (SQLite)
-    ├── Continuity (core/modules/continuity/)
+    ├── Continuity (core/continuity/)
     │   ├── scheduler → cron-based task runner
     │   └── executor → context isolation, task execution
     ├── TTS Server (core/tts/) → port 5012 (HTTP subprocess)
@@ -87,7 +87,7 @@ user/
 └── logs/                   # Application logs
 ```
 
-**Bootstrap:** On first run, `core/setup.py` copies factory defaults from `core/modules/system/` to `user/`.
+**Bootstrap:** On first run, `core/setup.py` copies factory defaults from `core/prompt_defaults/` to `user/`.
 
 ---
 
@@ -396,7 +396,7 @@ Each session has message history, per-chat settings (prompt, voice, toolset, LLM
 | `core/chat/function_manager.py` | Tool loading, scopes, story tools |
 | `core/chat/history.py` | Session management |
 | `core/story_engine/engine.py` | Story state, presets, custom tools |
-| `core/modules/continuity/scheduler.py` | Cron-based task scheduler |
+| `core/continuity/scheduler.py` | Cron-based task scheduler |
 | `core/audio/device_manager.py` | Audio device handling |
 | `functions/knowledge.py` | Knowledge base + people |
 | `functions/memory.py` | Long-term memory + embeddings |

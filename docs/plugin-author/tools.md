@@ -160,6 +160,8 @@ state.all()                    # entire dict
 state.clear()                  # wipe everything
 ```
 
+PluginState is thread-safe — daemon threads, continuity tasks, and API handlers can all read/write the same plugin's state concurrently without data loss.
+
 For heavier storage, plugins can create their own SQLite database.
 
 ---

@@ -92,3 +92,23 @@ def run(event):
             system.tts.speak(response)
     return "Briefing delivered"
 ```
+
+---
+
+## Important: `run()` vs Hook Handlers
+
+Schedule handlers use `def run(event)`. **Hook handlers do NOT** — they use the hook point name (e.g., `def pre_chat(event)`) or `def handle(event)` as fallback. If you name a hook handler `run()`, it will silently fail to register.
+
+| Context | Function Name |
+|---------|--------------|
+| Schedule handler | `def run(event)` |
+| Hook handler | `def pre_chat(event)`, `def prompt_inject(event)`, etc. |
+| Hook fallback | `def handle(event)` |
+
+---
+
+## Note on Webhook Tasks
+
+Webhook tasks are created by users in the Schedule UI, not declared in plugin manifests. They trigger when an HTTP request hits `/api/events/webhook/{path}`. Every webhook task gets an auto-generated secret — callers must include it in the `x-webhook-secret` header.
+
+For full webhook documentation, see [DAEMONS-WEBHOOKS.md](../DAEMONS-WEBHOOKS.md).

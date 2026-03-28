@@ -29,7 +29,7 @@ HOW IT WORKS:
 
 MANAGE TOOLSETS:
 - UI: Sidebar > Toolset Editor
-- Files: core/modules/system/toolsets/toolsets.json (defaults), user/toolsets/toolsets.json (custom)
+- Files: core/toolsets/toolsets.json (defaults), user/toolsets/toolsets.json (custom)
 - User file completely overrides defaults if present
 
 CREATE CUSTOM TOOLSET:

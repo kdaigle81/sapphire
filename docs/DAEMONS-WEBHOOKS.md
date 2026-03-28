@@ -210,7 +210,7 @@ Webhooks let external services trigger Sapphire via HTTP. Any service that can s
 - **Path** — the URL path (e.g. `deploy` → `/api/events/webhook/deploy`)
 - **Method** — GET, POST, or PUT
 
-**The webhook URL is unauthenticated** — anyone with the URL can trigger it. Use unique/random paths for security (e.g. `github-abc123` instead of `github`).
+**Webhook security:** Every webhook task gets an auto-generated secret. Callers must include the secret in the `x-webhook-secret` header, or use GitHub-style HMAC signatures (`x-hub-signature-256`). The secret is shown in the task's trigger config after creation. For additional security, use unique/random paths (e.g. `github-abc123` instead of `github`).
 
 ### Payload Handling
 
@@ -242,6 +242,7 @@ Events: Deployments
 ```bash
 curl -X POST https://localhost:8073/api/events/webhook/github-deploy \
   -H "Content-Type: application/json" \
+  -H "x-webhook-secret: YOUR_SECRET_HERE" \
   -d '{"service": "api", "status": "success", "version": "v2.1.0"}'
 ```
 
@@ -259,6 +260,7 @@ Knowledge scope: incidents
 ```bash
 curl -X POST https://your-sapphire:8073/api/events/webhook/monitor-alert-x7k9 \
   -H "Content-Type: application/json" \
+  -H "x-webhook-secret: YOUR_SECRET_HERE" \
   -d '{"host": "db-primary", "alert": "disk usage 92%", "level": "warning"}'
 ```
 
@@ -274,7 +276,8 @@ Voice: On
 
 **Trigger from cron or IFTTT:**
 ```bash
-curl "https://your-sapphire:8073/api/events/webhook/weather-update?city=Austin&units=imperial"
+curl -H "x-webhook-secret: YOUR_SECRET_HERE" \
+  "https://your-sapphire:8073/api/events/webhook/weather-update?city=Austin&units=imperial"
 ```
 
 ### Example: Home Assistant Event

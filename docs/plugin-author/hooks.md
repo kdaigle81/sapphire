@@ -36,7 +36,7 @@ All hooks receive a mutable `HookEvent`. Changes persist across handlers in prio
 }
 ```
 
-Each handler exports a function matching the hook name (e.g. `def pre_chat(event):`), or `def handle(event):` as fallback.
+Each handler exports a function matching the hook name (e.g. `def pre_chat(event):`), or `def handle(event):` as fallback. Do **not** use `def run(event):` — that's for schedule handlers only and will silently fail to register as a hook.
 
 ---
 
