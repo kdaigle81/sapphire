@@ -115,7 +115,7 @@ TOOLS = [
     },
 ]
 
-# Build send_email schema — add address param if allow-all is enabled
+# Build send_email schema — always include address param, runtime check gates it
 _send_props = {
     "recipient_id": {
         "type": "integer",
@@ -133,15 +133,12 @@ _send_props = {
         "type": "string",
         "description": "Email body text"
     },
-}
-_send_desc = "Send an email to a whitelisted contact, or reply to an inbox message. For new emails use recipient_id. For replies use reply_to_index (from get_inbox) — the recipient is resolved from the original message automatically."
-
-if _allow_all_enabled():
-    _send_props["address"] = {
+    "address": {
         "type": "string",
-        "description": "Email address to send to directly (only when allow-all is enabled). Use this OR recipient_id, not both."
-    }
-    _send_desc = "Send an email. For contacts use recipient_id (from get_recipients). For any address use the address parameter directly. For replies use reply_to_index (from get_inbox)."
+        "description": "Email address to send to directly (only works when allow-all-recipients is enabled in settings). Use this OR recipient_id, not both."
+    },
+}
+_send_desc = "Send an email. For contacts use recipient_id (from get_recipients). For any address use the address parameter directly (requires allow-all setting). For replies use reply_to_index (from get_inbox)."
 
 TOOLS.append({
     "type": "function",

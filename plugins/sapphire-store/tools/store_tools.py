@@ -214,7 +214,9 @@ def _install(slug, plugin_settings=None):
             return f"Failed to download from GitHub (HTTP {zr.status_code})", False
 
         # Save zip to temp
-        tmp_zip = Path(tempfile.mktemp(suffix=".zip"))
+        tmp_fd = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        tmp_zip = Path(tmp_fd.name)
+        tmp_fd.close()
         tmp_dir = None
         try:
             with open(tmp_zip, "wb") as f:

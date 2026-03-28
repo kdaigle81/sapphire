@@ -76,7 +76,7 @@ TOOLS = [
     }
 ]
 
-AVAILABLE_FUNCTIONS = {t["function"]["name"] for t in TOOLS}
+AVAILABLE_FUNCTIONS = [t["function"]["name"] for t in TOOLS]
 
 
 def _get_account():
