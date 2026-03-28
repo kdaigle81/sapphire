@@ -312,6 +312,7 @@ async def list_themes(_=Depends(require_login)):
                 "css": css_url,
                 "scripts": script_urls,
                 "preview": td.get("preview", {}),
+                "settings": td.get("settings", []),
             })
 
     return {"themes": themes}

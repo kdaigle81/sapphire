@@ -21,6 +21,7 @@ export default {
             <div class="theme-grid" id="theme-grid">
                 <div class="text-muted" style="font-size:var(--font-sm);padding:12px">Loading themes...</div>
             </div>
+            <div id="theme-settings-panel" style="display:none"></div>
 
             <div class="setting-section-title" style="margin-top:20px">Options</div>
             <div class="settings-grid">
@@ -84,6 +85,17 @@ export default {
             .theme-card-name { font-size: var(--font-xs); font-weight: 600; color: var(--text); text-align: center; }
             .theme-card-badge { font-size: 9px; color: var(--text-muted); }
             .theme-check { display: none; font-size: 10px; color: var(--accent, #4a9eff); }
+            .theme-settings-panel {
+                margin-top: 12px; padding: 14px; border-radius: 10px;
+                background: var(--bg-secondary); border: 1px solid var(--border);
+            }
+            .theme-settings-title { font-weight: 600; font-size: var(--font-sm); margin-bottom: 10px; color: var(--text); }
+            .theme-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
+            .theme-setting-row + .theme-setting-row { border-top: 1px solid var(--border); }
+            .theme-setting-label { font-size: var(--font-sm); color: var(--text); }
+            .theme-setting-help { font-size: var(--font-xs); color: var(--text-muted); }
+            .theme-setting-input select, .theme-setting-input input[type="range"] { min-width: 120px; }
+            .theme-setting-input input[type="checkbox"] { width: 16px; height: 16px; }
         </style>`;
     },
 
@@ -151,6 +163,11 @@ async function _loadThemeGrid(el) {
             const legacy = window.sapphireThemes.getAll();
             for (const [id, t] of Object.entries(legacy || {})) {
                 if (_allThemes.find(x => x.id === id)) continue; // skip dupes
+                // Check for settings: declared on theme object, or via getSettings()
+                let settings = t.settings || [];
+                if (!settings.length && window.sapphireThemes.getSettings) {
+                    try { settings = window.sapphireThemes.getSettings(id) || []; } catch {}
+                }
                 _allThemes.push({
                     id, name: t.name || id, icon: t.icon || '',
                     description: t.description || '',
@@ -158,6 +175,7 @@ async function _loadThemeGrid(el) {
                     css: t.css || '',
                     scripts: t.scripts || [],
                     preview: t.preview || {},
+                    settings,
                 });
             }
         } catch {}
@@ -195,6 +213,7 @@ async function _loadThemeGrid(el) {
     grid.innerHTML = cards || '<div class="text-muted" style="font-size:var(--font-sm)">No themes found</div>';
 
     // Click handler
+    const settingsPanel = el.querySelector('#theme-settings-panel');
     grid.addEventListener('click', e => {
         const card = e.target.closest('.theme-card');
         if (!card) return;
@@ -205,6 +224,87 @@ async function _loadThemeGrid(el) {
         // Update active state
         grid.querySelectorAll('.theme-card').forEach(c => c.classList.remove('active'));
         card.classList.add('active');
+        // Show/hide theme settings
+        _renderThemeSettings(settingsPanel, theme);
+    });
+
+    // Show settings for currently active theme on load
+    const activeTheme = _allThemes.find(t => _themeMatchesCurrent(t, currentTheme));
+    if (activeTheme) _renderThemeSettings(settingsPanel, activeTheme);
+}
+
+
+function _renderThemeSettings(panel, theme) {
+    if (!panel) return;
+    const settings = theme.settings || [];
+    if (!settings.length) {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+        return;
+    }
+
+    const rows = settings.map(s => {
+        const key = s.key || '';
+        const current = localStorage.getItem(key) || s.default || '';
+        let input = '';
+
+        if (s.type === 'select' && s.options) {
+            input = `<select data-setting-key="${_esc(key)}">
+                ${s.options.map(o => {
+                    const val = typeof o === 'string' ? o : o.value;
+                    const label = typeof o === 'string' ? o : (o.label || o.value);
+                    return `<option value="${_esc(val)}" ${val === current ? 'selected' : ''}>${_esc(label)}</option>`;
+                }).join('')}
+            </select>`;
+        } else if (s.type === 'boolean' || s.type === 'checkbox') {
+            const checked = current === 'true' || current === true;
+            input = `<input type="checkbox" data-setting-key="${_esc(key)}" ${checked ? 'checked' : ''}>`;
+        } else if (s.type === 'range') {
+            input = `<input type="range" data-setting-key="${_esc(key)}"
+                min="${s.min || 0}" max="${s.max || 100}" step="${s.step || 1}" value="${_esc(current)}">
+                <span class="text-muted" style="font-size:var(--font-xs);min-width:30px;text-align:right">${_esc(current)}</span>`;
+        } else {
+            input = `<input type="text" data-setting-key="${_esc(key)}" value="${_esc(current)}" style="width:120px">`;
+        }
+
+        return `
+            <div class="theme-setting-row">
+                <div>
+                    <div class="theme-setting-label">${_esc(s.label || s.key)}</div>
+                    ${s.help ? `<div class="theme-setting-help">${_esc(s.help)}</div>` : ''}
+                </div>
+                <div class="theme-setting-input">${input}</div>
+            </div>`;
+    }).join('');
+
+    panel.innerHTML = `
+        <div class="theme-settings-panel">
+            <div class="theme-settings-title">${theme.icon || ''} ${_esc(theme.name)} Settings</div>
+            ${rows}
+        </div>`;
+    panel.style.display = '';
+
+    // Wire change handlers — write to localStorage + dispatch event for live themes
+    panel.querySelectorAll('[data-setting-key]').forEach(input => {
+        const handler = () => {
+            const key = input.dataset.settingKey;
+            const val = input.type === 'checkbox' ? String(input.checked) : input.value;
+            localStorage.setItem(key, val);
+            // Update range display
+            if (input.type === 'range') {
+                const span = input.nextElementSibling;
+                if (span) span.textContent = val;
+            }
+            // Apply data-attribute for chat-style settings (frosted glass etc.)
+            const chatStyleMatch = key.match(/^(.+)-chat-style$/);
+            if (chatStyleMatch) {
+                document.documentElement.setAttribute(`data-${chatStyleMatch[1]}-chat`, val);
+            }
+            // Notify live theme JS (they can listen for storage events or custom events)
+            window.dispatchEvent(new CustomEvent('sapphire-theme-setting', { detail: { key, value: val } }));
+        };
+        input.addEventListener('change', handler);
+        if (input.type === 'range') input.addEventListener('input', handler);
     });
 }
 
