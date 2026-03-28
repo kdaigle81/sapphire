@@ -39,7 +39,7 @@ def _get_merged_plugins():
     """Merge static and user plugins.json."""
     static_plugins_json = STATIC_DIR / 'core-ui' / 'plugins.json'
     try:
-        with open(static_plugins_json) as f:
+        with open(static_plugins_json, encoding='utf-8') as f:
             static = json.load(f)
     except Exception:
         static = {"enabled": [], "plugins": {}}
@@ -48,7 +48,7 @@ def _get_merged_plugins():
         return static
 
     try:
-        with open(USER_PLUGINS_JSON) as f:
+        with open(USER_PLUGINS_JSON, encoding='utf-8') as f:
             user = json.load(f)
     except Exception:
         return static
@@ -188,13 +188,13 @@ async def toggle_plugin(plugin_name: str, request: Request, _=Depends(require_lo
         user_data = {}
         if USER_PLUGINS_JSON.exists():
             try:
-                with open(USER_PLUGINS_JSON) as f:
+                with open(USER_PLUGINS_JSON, encoding='utf-8') as f:
                     user_data = json.load(f)
             except Exception:
                 pass
         user_data["enabled"] = enabled
         tmp_path = USER_PLUGINS_JSON.with_suffix('.tmp')
-        with open(tmp_path, 'w') as f:
+        with open(tmp_path, 'w', encoding='utf-8') as f:
             json.dump(user_data, f, indent=2)
         tmp_path.replace(USER_PLUGINS_JSON)
 
@@ -213,7 +213,7 @@ async def toggle_plugin(plugin_name: str, request: Request, _=Depends(require_lo
                             enabled.remove(plugin_name)
                         user_data["enabled"] = enabled
                         tmp_path = USER_PLUGINS_JSON.with_suffix('.tmp')
-                        with open(tmp_path, 'w') as f:
+                        with open(tmp_path, 'w', encoding='utf-8') as f:
                             json.dump(user_data, f, indent=2)
                         tmp_path.replace(USER_PLUGINS_JSON)
                         verify_msg = plugin_loader._plugins[plugin_name].get("verify_msg", "unknown")

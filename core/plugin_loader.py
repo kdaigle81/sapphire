@@ -38,6 +38,7 @@ class PluginState:
     def __init__(self, plugin_name: str):
         self._name = plugin_name
         self._path = PLUGIN_STATE_DIR / f"{plugin_name}.json"
+        self._lock = threading.Lock()
         self._data = self._load()
 
     def _load(self) -> dict:
@@ -58,18 +59,22 @@ class PluginState:
         return self._data.get(key, default)
 
     def save(self, key: str, value):
-        self._data[key] = value
-        self._save()
+        with self._lock:
+            self._data[key] = value
+            self._save()
 
     def delete(self, key: str):
-        self._data.pop(key, None)
-        self._save()
+        with self._lock:
+            self._data.pop(key, None)
+            self._save()
 
     def all(self) -> dict:
-        return dict(self._data)
+        with self._lock:
+            return dict(self._data)
 
     def clear(self):
-        self._data = {}
+        with self._lock:
+            self._data = {}
         self._save()
 
 
@@ -405,7 +410,9 @@ class PluginLoader:
                 defaults = {f["key"]: f["default"] for f in settings_schema if "key" in f and "default" in f}
                 if defaults:
                     settings_file.parent.mkdir(parents=True, exist_ok=True)
-                    settings_file.write_text(json.dumps(defaults, indent=2), encoding="utf-8")
+                    tmp = settings_file.with_suffix('.json.tmp')
+                    tmp.write_text(json.dumps(defaults, indent=2), encoding="utf-8")
+                    tmp.replace(settings_file)
                     logger.debug(f"[PLUGINS] Seeded default settings for {name}")
 
         logger.info(f"[PLUGINS] Loaded: {name} (priority {base_priority}, {band})")

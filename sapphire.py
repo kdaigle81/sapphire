@@ -505,6 +505,7 @@ class VoiceChatSystem:
             ("agents", lambda: hasattr(self, 'agent_manager') and self.agent_manager and self.agent_manager.shutdown()),
             ("voice components", self.stop_components),
             ("continuity scheduler", lambda: hasattr(self, 'continuity_scheduler') and self.continuity_scheduler and self.continuity_scheduler.stop()),
+            ("backup scheduler", lambda: __import__('core.backup', fromlist=['backup_manager']).backup_manager.stop()),
             ("TTS server", lambda: self.tts_server_manager and self.tts_server_manager.stop()),
             ("settings watcher", settings.stop_file_watcher),
             ("prompt watcher", lambda: prompts.prompt_manager.stop_file_watcher()),

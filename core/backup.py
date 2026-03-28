@@ -12,6 +12,7 @@ class Backup:
     """Backup manager for the user/ directory."""
 
     def __init__(self):
+        self._stop_event = None
         self.base_dir = Path(getattr(config, 'BASE_DIR', Path(__file__).parent.parent))
         self.user_dir = self.base_dir / "user"
         self.backup_dir = self.base_dir / "user_backups"
@@ -154,14 +155,19 @@ class Backup:
         return None
 
 
+    def stop(self):
+        """Signal the backup scheduler to stop."""
+        if self._stop_event:
+            self._stop_event.set()
+
     def start_scheduler(self):
         """Start background thread that runs scheduled backups at BACKUPS_HOUR (default 3am local time)."""
         import threading
         from datetime import timedelta
+        self._stop_event = threading.Event()
 
         def _backup_loop():
-            import time
-            while True:
+            while not self._stop_event.is_set():
                 hour = getattr(config, 'BACKUPS_HOUR', 3)
                 now = datetime.now()
                 target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
@@ -169,7 +175,8 @@ class Backup:
                     target += timedelta(days=1)
                 wait_seconds = (target - now).total_seconds()
                 logger.info(f"Backup scheduler: next run in {wait_seconds / 3600:.1f}h at {target.strftime('%Y-%m-%d %H:%M')}")
-                time.sleep(wait_seconds)
+                if self._stop_event.wait(wait_seconds):
+                    break  # Stop requested during sleep
                 try:
                     result = self.run_scheduled()
                     logger.info(f"Backup scheduler: {result}")

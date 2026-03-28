@@ -133,6 +133,7 @@ async def reset_settings(request: Request, _=Depends(require_login)):
             await asyncio.to_thread(system.toggle_wakeword, False)
             await asyncio.to_thread(system.switch_tts_provider, 'none')
             await asyncio.to_thread(system.switch_stt_provider, 'none')
+            await asyncio.to_thread(system.switch_embedding_provider, 'none')
         except Exception as e:
             logger.warning(f"Provider re-init after reset: {e}")
         return {"status": "success", "message": "All settings reset to defaults"}
@@ -264,7 +265,7 @@ async def get_settings_help(request: Request, _=Depends(require_login)):
     """Get help text for settings."""
     help_path = Path(__file__).parent.parent / "settings_help.json"
     try:
-        with open(help_path) as f:
+        with open(help_path, encoding='utf-8') as f:
             return {"help": json.load(f)}
     except Exception:
         return {"help": {}}
@@ -275,7 +276,7 @@ async def get_setting_help(key: str, request: Request, _=Depends(require_login))
     """Get help for a specific setting."""
     help_path = Path(__file__).parent.parent / "settings_help.json"
     try:
-        with open(help_path) as f:
+        with open(help_path, encoding='utf-8') as f:
             all_help = json.load(f)
     except Exception:
         raise HTTPException(status_code=500, detail="Could not load help data")
@@ -297,7 +298,7 @@ async def get_chat_defaults(request: Request, _=Depends(require_login)):
     """Get chat defaults."""
     defaults_path = PROJECT_ROOT / "user" / "settings" / "chat_defaults.json"
     if defaults_path.exists():
-        with open(defaults_path, 'r') as f:
+        with open(defaults_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {}
 
@@ -309,7 +310,7 @@ async def save_chat_defaults(request: Request, _=Depends(require_login)):
     defaults_path = PROJECT_ROOT / "user" / "settings" / "chat_defaults.json"
     defaults_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = defaults_path.with_suffix('.tmp')
-    with open(tmp_path, 'w') as f:
+    with open(tmp_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
     tmp_path.replace(defaults_path)
     return {"status": "success"}
