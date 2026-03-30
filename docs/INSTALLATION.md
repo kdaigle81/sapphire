@@ -130,12 +130,12 @@ Use cloud APIs for stronger models. Your conversations go to external servers.
 |----------|-----------|-------------|
 | Claude (Anthropic) | Complex tasks, conversation | [console.anthropic.com](https://console.anthropic.com/) |
 | OpenAI | GPT models, well-supported | [platform.openai.com](https://platform.openai.com/) |
-| Fireworks | Fast, many open models | [fireworks.ai](https://fireworks.ai/) |
+| Gemini (Google) | Fast, multimodal | [aistudio.google.com](https://aistudio.google.com/) |
 
 Set your API key via environment variable or in the setup wizard:
 - `ANTHROPIC_API_KEY` for Claude
 - `OPENAI_API_KEY` for OpenAI
-- `FIREWORKS_API_KEY` for Fireworks
+- `GOOGLE_API_KEY` for Gemini
 
 Sapphire automatically falls back between enabled providers if one fails.
 
@@ -294,7 +294,7 @@ OPTIONAL FEATURES (only for minimal install):
 
 LLM OPTIONS:
 - Local: LM Studio on port 1234 (private, free)
-- Cloud: Claude/OpenAI/Fireworks (set API key via env var or Settings)
+- Cloud: Claude/OpenAI/Gemini (set API key via env var or Settings)
 - Setup wizard configures on first run
 - Auto-fallback between enabled providers
 

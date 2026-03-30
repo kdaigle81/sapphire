@@ -111,16 +111,14 @@ OpenAI automatically caches prompts longer than 1024 tokens. You don't need to e
 
 ---
 
-## Fireworks
+## Gemini (Google)
 
-Fireworks uses **session affinity** for caching — requests with the same session ID route to the same replica, which keeps the model's KV cache warm.
-
-Sapphire handles this automatically (sends a stable session ID per chat). No configuration needed.
+Gemini uses automatic **context caching** for prompts. Google manages caching internally — no configuration needed from Sapphire's side.
 
 **Tips:**
-- Fireworks caching is replica-level, so it's less predictable than Claude/OpenAI
-- Still benefits from stable system prompts
-- Open models on Fireworks are generally cheaper per token than Claude/OpenAI
+- Same cache-friendly rules apply — stable system prompts help
+- Gemini models are generally cost-competitive, especially Gemini Flash
+- Thinking-enabled models (Gemini 2.5 Flash) use `reasoning_effort` to control thinking cost
 
 ---
 
@@ -184,10 +182,10 @@ OPENAI CACHING:
 - 50% discount on cached input
 - No configuration needed
 
-FIREWORKS CACHING:
-- Session affinity (automatic, per-chat session ID)
-- Replica-level KV cache, less predictable
-- Generally cheaper per-token than Claude/OpenAI
+GEMINI CACHING:
+- Automatic context caching (no configuration)
+- Cost-competitive, especially Gemini Flash
+- Thinking via reasoning_effort param
 
 MONITORING:
 - Settings → Dashboard → Token Metrics

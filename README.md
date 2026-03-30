@@ -57,7 +57,7 @@ Hey I'm Chris, a solo dev with a burning passion for this project. It's consumed
 - **Agents** - [AGENTS.md](docs/AGENTS.md) Spawn background AI workers that report back when done.
 - **Import/Export** - [IMPORT-EXPORT.md](docs/IMPORT-EXPORT.md) Share personas, prompts, toolsets, and more as JSON files.
 - **Dashboard** - [DASHBOARD.md](docs/DASHBOARD.md) Token metrics, auto-updater, system controls.
-- **Cloud** (optional) - Claude, GPT, Fireworks. Only active when you enable them. Local-first by default.
+- **Cloud** (optional) - Claude, GPT, Gemini. Only active when you enable them. Local-first by default.
 - **Privacy** - One toggle blocks all cloud connections. Fully local, nothing leaves your machine.
 - **Plugins** - [PLUGINS.md](docs/PLUGINS.md) Hooks, tools, voice commands, scheduling, web settings — all in one system.
 - **Desktop/Mobile/Voice** - Run on your local browser, open the same chat to your phone, then finish it on your mic.
@@ -145,6 +145,7 @@ cd sapphire
 git pull
 pip install -r requirements.txt
 ```
+Or use the in-app update button in Settings → Dashboard. See [INSTALLATION.md — Update](docs/INSTALLATION.md#update-sapphire) for details.
 
 ## Upgrading from 1.x to 2.0
 
@@ -182,7 +183,7 @@ This removes the Python environment. Delete the `sapphire/` folder to remove eve
 |-------|-------------|
 | [Installation](docs/INSTALLATION.md) | Setup guide, systemd service |
 | [Quick Start](docs/QUICK-START.md) | First persona, LLM setup, integrations |
-| [API](docs/API.md) | All 221 REST endpoints |
+| [API](docs/API.md) | All ~280 REST endpoints |
 | [SOCKS Proxy](docs/SOCKS.md) | Privacy proxy for web tools |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and fixes |
 | [Technical](docs/TECHNICAL.md) | Architecture and internals |

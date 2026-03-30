@@ -14,6 +14,12 @@ When creating or modifying plugins:
 - Schedule = cron tasks calling `run(event)` handler, event has `system`, `config`, `task`, `plugin_state`
 - Web settings = `web/index.js` using `registerPluginSettings()`, served at `/plugin-web/{name}/`
 - Plugin scripts = `web/main.js` auto-loaded on app startup, listen for `sapphire:tool_start` DOM events
+- Daemon = background thread with `start(plugin_loader, settings)` / `stop()`, emits events via `plugin_loader.emit_daemon_event(source_name, json_payload)`
+- Daemon event sources declared in manifest `capabilities.daemon.event_sources[]` — `name`, `label`, `filter_fields`, `task_fields`
+- Reply handlers: `plugin_loader.register_reply_handler(plugin_name, handler)` — routes LLM responses back to source platform
+- Providers = register TTS/STT/Embedding/LLM backends via `capabilities.providers` — appear in settings dropdowns
+- App = full-page plugin UI via `capabilities.app` — `label`, `icon`, optional `nav: true` for navrail promotion (max 3)
+- Themes = custom CSS themes via `capabilities.themes[]` — `css`, `scripts`, `preview`, per-theme `settings`
 - State = `plugin_loader.get_plugin_state(name)` for persistent key-value storage
 - System access = `event.metadata.get("system")` in `pre_chat`, `post_chat`, `pre_execute` hooks
 - `prompt_inject`, `post_execute`, `pre_tts` do NOT get system metadata — only `config`

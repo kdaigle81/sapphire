@@ -93,7 +93,7 @@
 - Not all models support thinking. Check provider supports it.
 - Claude: Enable "Extended Thinking" in LLM settings
 - GPT-5.x: Uses Responses API, set reasoning_summary to "detailed"
-- Fireworks: Only works with thinking-enabled models (Qwen3-Thinking, Kimi-K2-Thinking)
+- Gemini: Set reasoning_effort (low/medium/high) on thinking-enabled models (Gemini 2.5 Flash/Pro)
 - Local models via LM Studio: May need specific model that outputs `<think>` tags
 
 **Thinking breaks when switching providers**

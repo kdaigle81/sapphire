@@ -16,6 +16,7 @@ A plugin is a package that can contain tools, yes, but also hooks into parts of 
 - **React to wakeword detection** before recording starts (`on_wake`)
 - **Provide custom inference providers** — TTS, STT, Embedding, or LLM backends that appear in settings dropdowns ([guide](providers.md))
 - **Run scheduled tasks** on cron timers, independent of any conversation
+- **Run background daemons** — listen for external events (messages, emails) and trigger AI responses ([guide](daemons.md))
 - **Register voice commands** — keyword triggers that bypass the LLM entirely
 - **Ship a settings UI** that renders in the browser with zero JavaScript (or full custom JS)
 
@@ -36,6 +37,7 @@ A tool is a single function the AI can call. A plugin is an autonomous package t
 | [Tools](tools.md) | Tool file format, schema flags, scopes, reading settings, privacy patterns |
 | [Routes](routes.md) | Custom HTTP endpoints — path params, auth enforcement, handler signature |
 | [Schedule](schedule.md) | Cron tasks — manifest fields, handler contract, examples |
+| [Daemons](daemons.md) | Background event listeners — Telegram, Discord, Email, custom sources |
 | [Settings](settings.md) | Manifest-declared settings, custom web UI, settings API, danger confirms |
 | [Web UI](web-ui.md) | Shared JS modules, CSS variables, modals, CSRF, style injection |
 | [Signing](signing.md) | Verification states, sideloading, signing your own plugins |
