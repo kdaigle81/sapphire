@@ -839,15 +839,18 @@ class FunctionManager:
                 plugin_settings = self._get_plugin_settings_for(function_name)
                 if plugin_settings is not None:
                     from core.credentials_manager import credentials
+                    import inspect
                     try:
+                        sig = inspect.signature(executor)
+                        nparams = len(sig.parameters)
+                    except (ValueError, TypeError):
+                        nparams = 5  # assume full signature
+                    if nparams >= 5:
                         result, success = executor(function_name, arguments, config, plugin_settings, credentials)
-                    except TypeError:
-                        try:
-                            # Backward compat: tool doesn't accept 5th arg
-                            result, success = executor(function_name, arguments, config, plugin_settings)
-                        except TypeError:
-                            # Backward compat: tool doesn't accept 4th arg
-                            result, success = executor(function_name, arguments, config)
+                    elif nparams >= 4:
+                        result, success = executor(function_name, arguments, config, plugin_settings)
+                    else:
+                        result, success = executor(function_name, arguments, config)
                 else:
                     result, success = executor(function_name, arguments, config)
             except Exception as e:

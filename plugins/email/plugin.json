@@ -55,7 +55,15 @@
         "label": "Allow sending to any address",
         "default": false,
         "help": "WARNING: When enabled, the AI can email anyone — not just whitelisted contacts. It can use recipient IDs from People OR type an email address directly. Use with caution.",
-        "confirm": "allow_all_recipients"
+        "confirm": {
+          "values": ["true"],
+          "title": "Allow Unrestricted Email",
+          "warnings": [
+            "The AI will be able to email ANY address — not just whitelisted contacts",
+            "This bypasses the People whitelist safety net entirely"
+          ],
+          "buttonLabel": "I understand, enable it"
+        }
       }
     ]
   }

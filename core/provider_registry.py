@@ -69,16 +69,17 @@ class BaseProviderRegistry:
 
     def create(self, key: str, **kwargs) -> Optional[Any]:
         """Create a provider instance by key. Returns None if not found."""
-        entry = self._core.get(key) or self._plugins.get(key)
-        if not entry:
-            if key and key != 'none':
-                logger.warning(f"[{self.system_name}] Unknown provider '{key}'")
-            # Fall back to 'none' if registered
-            entry = self._core.get('none')
+        with self._lock:
+            entry = self._core.get(key) or self._plugins.get(key)
             if not entry:
-                return None
+                if key and key != 'none':
+                    logger.warning(f"[{self.system_name}] Unknown provider '{key}'")
+                entry = self._core.get('none')
+                if not entry:
+                    return None
+            cls = entry['class']
         try:
-            return entry['class'](**kwargs)
+            return cls(**kwargs)
         except Exception as e:
             logger.error(f"[{self.system_name}] Failed to create '{key}': {e}")
             return None

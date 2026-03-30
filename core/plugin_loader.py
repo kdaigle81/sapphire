@@ -688,8 +688,8 @@ class PluginLoader:
         # Remove from enabled list on disk
         self._remove_from_enabled_list([name])
 
-        # Delete plugin directory
-        plugin_dir = USER_PLUGINS_DIR / name
+        # Delete plugin directory (use actual path, not name — they may differ)
+        plugin_dir = info["path"] if info else USER_PLUGINS_DIR / name
         if plugin_dir.exists():
             shutil.rmtree(plugin_dir)
 

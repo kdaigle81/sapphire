@@ -18,33 +18,41 @@ _thread: threading.Thread = None
 _stop_event = threading.Event()
 _plugin_loader = None
 _poll_interval: int = 120  # seconds, overridden by settings
+_lifecycle_lock = threading.Lock()
 
 
 def start(plugin_loader, settings):
     """Called by plugin_loader on load."""
     global _thread, _plugin_loader, _poll_interval
 
-    _plugin_loader = plugin_loader
-    _poll_interval = int(settings.get("poll_interval", 120))
+    with _lifecycle_lock:
+        _plugin_loader = plugin_loader
+        _poll_interval = int(settings.get("poll_interval", 120))
 
-    if _poll_interval < 30:
-        _poll_interval = 30  # sanity floor
+        if _poll_interval < 30:
+            _poll_interval = 30  # sanity floor
 
-    _stop_event.clear()
-    _thread = threading.Thread(target=_poll_loop, daemon=True, name="email-daemon")
-    _thread.start()
+        if _thread and _thread.is_alive():
+            logger.warning("[EMAIL] Daemon already running — skipping double-start")
+            return
 
-    plugin_loader.register_reply_handler("email", _reply_handler)
+        _stop_event.clear()
+        _thread = threading.Thread(target=_poll_loop, daemon=True, name="email-daemon")
+        _thread.start()
+
+        plugin_loader.register_reply_handler("email", _reply_handler)
     logger.info(f"[EMAIL] Daemon started (poll every {_poll_interval}s)")
 
 
 def stop():
     """Called by plugin_loader on unload."""
     global _thread
-    _stop_event.set()
-    if _thread and _thread.is_alive():
-        _thread.join(timeout=5)
-    _thread = None
+
+    with _lifecycle_lock:
+        _stop_event.set()
+        if _thread and _thread.is_alive():
+            _thread.join(timeout=5)
+        _thread = None
     logger.info("[EMAIL] Daemon stopped")
 
 
