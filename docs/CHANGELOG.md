@@ -1,3 +1,6 @@
+# 2.5.1 - Plugin pip deps
+- Plugins missing pip deps show what is missing
+- Offers to install those pip packages
 # 2.5.0 - Plugin Expansion
 ## March 30, 2026
 - You need to re-add your LLMs in settings! trust me, better
