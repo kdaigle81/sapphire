@@ -1,3 +1,7 @@
+# 2.5.2 - Avatar maker
+- Get character for Mixamo
+- Load Mixamo char in, get animations
+- Put all in folders, then run the script
 # 2.5.1 - Plugin pip deps
 - Plugins missing pip deps show what is missing
 - Offers to install those pip packages
