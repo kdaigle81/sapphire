@@ -239,9 +239,13 @@ export const streamChatContinue = async (text, prefill, onChunk, onComplete, onE
 // Avatar tag scanner — wraps onChunk to detect <<avatar: trackname>> in streamed responses
 // Reads strip_tags setting from avatar plugin state (cached on page load)
 window._avatarStripTags = false;
-fetch('/api/plugin/avatar/config').then(r => r.ok ? r.json() : {}).then(cfg => {
+fetch('/api/plugin/avatar/config').then(r => {
+    if (!r.ok) { console.warn('[Avatar] Config fetch failed:', r.status); return {}; }
+    return r.json();
+}).then(cfg => {
     window._avatarStripTags = cfg?.strip_tags ?? false;
-}).catch(() => {});
+    console.log('[Avatar] strip_tags =', window._avatarStripTags);
+}).catch(e => { console.warn('[Avatar] Config fetch error:', e); });
 
 function _wrapChunkWithAvatarScan(onChunk) {
     let scanBuf = '';
