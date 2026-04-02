@@ -8,12 +8,12 @@
     "build_avatar_sapphire.py": "sha256:6c392cd1ef24b5b70a197998dde3b4c6f9924d24e6331c282fcede426da94d6f",
     "glb_merger.py": "sha256:6baccd4aced1a2fb5d97bc0b679ea58b8f0bc35527abadbc1dd9b3ace99d13ca",
     "glb_parser.py": "sha256:86faa6b6aa71e317eef840981ec7a923e885826b980738e5a127972d2a9ec4b9",
-    "hooks/prompt_inject.py": "sha256:888234461ac360d5362788a87f3f3c0e0f48ea5b4eda5efca1aa25189d34ab79",
+    "hooks/prompt_inject.py": "sha256:9c614020a86b17ebb6cd39e515e6a249a478d78e691b029300b943185ed94568",
     "plugin.json": "sha256:21292cf8a11a3cf222d5f4af72f9e24e1a52b3777502b5d958fcb4587e96a69e",
-    "routes/api.py": "sha256:dec9490cfd889d5ae75f56ba9557fb011b01c7afbcb790420b5bbe6f3f480598",
+    "routes/api.py": "sha256:b621e3f63c33f1400268bd16e5a1ed711135830a8f8562c6a2bcbd4c8c305b95",
     "web/camera-orbits.js": "sha256:7e3729c92e78a56c9d857726af2c0604caa92899d80a9779f76d9502c928df9d",
     "web/environment.js": "sha256:591e515585034d671f849bec899e70b01426fb7ea01e6a4085da4a383e8eaf99",
-    "web/index.js": "sha256:b21ef88af41a5966d1e903d0f858c52a884f94e621b4da9f85567fab7bf1945b",
+    "web/index.js": "sha256:faae1e3a3d76c07667bf3463fd2fc260bc27c8918501e3b1d543e6de64502447",
     "web/location-loader.js": "sha256:44e5ff7c32326f83a18e0a66469711960844bc1e6d27d5345b689750fb8e0206",
     "web/locations/cabin.json": "sha256:eb865f82e70a35667d1ebb1c0c9d4c98f235c4cc98fc9e2bb92ffaacbde83c26",
     "web/locations/garden.json": "sha256:31490c87be0e50db9e63ab8b8b595ce40414d6f3dbf03f6d599a5d4f62f0081a",
@@ -25,5 +25,5 @@
     "web/sidebar.html": "sha256:c0d25cc097f997c3413abd941e6bbbde238cb6c65e35a0d19885d75b40fc5e25",
     "web/sidebar.js": "sha256:92e176d03aa5e9ab42f9895f41766547a0c8a3ad0c1eba98106d4839c5b1ac5e"
   },
-  "signature": "8L5iHiTFOdlkhRbywvWJUf+rdqOI9+TbALApIJrWbydiTIPmBB0T+9iHpYtAUvpcYQQtGzDytOG2mL8ENzkhDA=="
+  "signature": "0dzBmichYi+acPj7d8v0ZtgU1c1ma9auenon7VSKH0fN9CRGbCf8FUi//v4l7Uzre7YwO61LrbqaqNLOT4ECBA=="
 }

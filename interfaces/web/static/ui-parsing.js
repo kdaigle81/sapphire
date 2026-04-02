@@ -582,7 +582,11 @@ export const wrapImageGalleries = (container) => {
 export const parseContent = (el, msg, isHistoryRender = false, scrollCallback = null) => {
     globalThinkCounter = 0;
 
-    const txt = typeof msg === 'string' ? msg : (msg.content || '');
+    let txt = typeof msg === 'string' ? msg : (msg.content || '');
+    // Strip avatar tags from rendered text if setting is enabled
+    if (window._avatarStripTags) {
+        txt = txt.replace(/<<avatar:\s*[a-zA-Z0-9_]+(?:\s+\d+(?:\.\d+)?s)?>>/g, '');
+    }
     const parts = (typeof msg === 'object' && msg.parts) ? msg.parts : [];
     const userImages = (typeof msg === 'object' && msg.images) ? msg.images : [];
     const userFiles = (typeof msg === 'object' && msg.files) ? msg.files : [];
@@ -611,7 +615,11 @@ export const parseContent = (el, msg, isHistoryRender = false, scrollCallback = 
         let thinkCnt = 0;
         parts.forEach(part => {
             if (part.type === 'content') {
-                renderContentText(el, part.text, isHistoryRender, scrollCallback, thinkCnt);
+                let partText = part.text;
+                if (window._avatarStripTags) {
+                    partText = partText.replace(/<<avatar:\s*[a-zA-Z0-9_]+(?:\s+\d+(?:\.\d+)?s)?>>/g, '');
+                }
+                renderContentText(el, partText, isHistoryRender, scrollCallback, thinkCnt);
             } else if (part.type === 'tool_result') {
                 renderToolResult(el, part);
             }

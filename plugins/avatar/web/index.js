@@ -63,6 +63,20 @@ registerPluginSettings({
         container.innerHTML = `
             <div class="avatar-settings">
                 <div class="avatar-section">
+                    <h3>Behavior</h3>
+                    <label class="avatar-checkbox">
+                        <input type="checkbox" id="avatar-inject-prompt" checked>
+                        <span>Include animation instructions in AI prompt</span>
+                    </label>
+                    <p class="avatar-help" style="margin:2px 0 6px 22px">When enabled, the AI knows about animations and can trigger them with &lt;&lt;avatar: trackname&gt;&gt; tags in its responses.</p>
+                    <label class="avatar-checkbox">
+                        <input type="checkbox" id="avatar-strip-tags">
+                        <span>Hide animation tags from chat</span>
+                    </label>
+                    <p class="avatar-help" style="margin:2px 0 0 22px">Strip &lt;&lt;avatar: ...&gt;&gt; tags so they don't appear in chat messages. Animations still play.</p>
+                </div>
+
+                <div class="avatar-section">
                     <h3>Models</h3>
                     <div id="avatar-model-list" class="avatar-model-list"></div>
                     <label class="avatar-upload-btn">
@@ -126,6 +140,35 @@ registerPluginSettings({
             }
             if (label) {
                 label.innerHTML = 'Upload Model (.glb)<input type="file" id="avatar-upload" accept=".glb" hidden>';
+            }
+        });
+
+        // Load behavior checkboxes from config
+        fetchJSON(`${API}/config`).then(cfg => {
+            if (!cfg) return;
+            const injectCb = container.querySelector('#avatar-inject-prompt');
+            const stripCb = container.querySelector('#avatar-strip-tags');
+            if (injectCb) injectCb.checked = cfg.inject_prompt !== false;
+            if (stripCb) stripCb.checked = cfg.strip_tags === true;
+        });
+
+        // Wire behavior checkboxes — save immediately on change
+        container.addEventListener('change', (e) => {
+            if (e.target.id === 'avatar-inject-prompt') {
+                fetch(`${API}/config`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+                    body: JSON.stringify({ inject_prompt: e.target.checked }),
+                });
+            }
+            if (e.target.id === 'avatar-strip-tags') {
+                fetch(`${API}/config`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+                    body: JSON.stringify({ strip_tags: e.target.checked }),
+                });
+                // Update the live scanner
+                window._avatarStripTags = e.target.checked;
             }
         });
 
@@ -321,6 +364,8 @@ function injectStyles() {
         .avatar-section { display: block !important; }
         .avatar-section h3 { margin: 0 0 8px; font-size: 14px; color: var(--text); }
         .avatar-help { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
+        .avatar-checkbox { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; margin-bottom: 4px; }
+        .avatar-checkbox input { accent-color: #4a9eff; margin: 0; }
 
         .avatar-model-list { display: flex !important; flex-direction: column !important; gap: 6px; margin-bottom: 10px; }
         .avatar-model-card {

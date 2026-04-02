@@ -32,6 +32,15 @@ def _get_track_names(glb_path):
 
 
 def prompt_inject(event):
+    # Check if prompt injection is enabled
+    try:
+        from core.plugin_loader import plugin_loader
+        state = plugin_loader.get_plugin_state("avatar")
+        if not state.get("inject_prompt", True):
+            return
+    except Exception:
+        pass
+
     model = _get_active_model()
     glb_path = USER_AVATAR_DIR / model
     tracks = _get_track_names(glb_path)

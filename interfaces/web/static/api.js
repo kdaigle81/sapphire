@@ -237,22 +237,48 @@ export const streamChatContinue = async (text, prefill, onChunk, onComplete, onE
 };
 
 // Avatar tag scanner — wraps onChunk to detect <<avatar: trackname>> in streamed responses
+// Reads strip_tags setting from avatar plugin state (cached on page load)
+window._avatarStripTags = false;
+fetch('/api/plugin/avatar/config').then(r => r.ok ? r.json() : {}).then(cfg => {
+    window._avatarStripTags = cfg?.strip_tags ?? false;
+}).catch(() => {});
+
 function _wrapChunkWithAvatarScan(onChunk) {
-    let buf = '';
+    let scanBuf = '';
+    let holdBuf = '';  // text held back while a potential tag is forming
+    const tagRe = /<<avatar:\s*([a-zA-Z0-9_]+)(?:\s+(\d+(?:\.\d+)?s))?>>/g;
     return (chunk) => {
-        onChunk(chunk);
-        dispatch('chat_chunk', { text: chunk });
-        buf += chunk;
-        const re = /<<avatar:\s*([a-zA-Z0-9_]+)(?:\s+(\d+(?:\.\d+)?s))?>>/g;
-        for (const match of buf.matchAll(re)) {
+        // Scan for complete tags
+        scanBuf += chunk;
+        for (const match of scanBuf.matchAll(tagRe)) {
             const track = match[1];
             const duration = match[2] ? parseFloat(match[2]) * 1000 : null;
-            console.log(`[Avatar] Tag detected: track="${track}" duration=${duration}`);
             dispatch('avatar_animate', { track, duration });
         }
-        // Keep only possible partial tag
-        const lastOpen = buf.lastIndexOf('<<');
-        buf = lastOpen >= 0 && buf.indexOf('>>', lastOpen) < 0 ? buf.slice(lastOpen) : '';
+        const lastOpen = scanBuf.lastIndexOf('<<');
+        scanBuf = lastOpen >= 0 && scanBuf.indexOf('>>', lastOpen) < 0 ? scanBuf.slice(lastOpen) : '';
+
+        if (window._avatarStripTags) {
+            // Buffer text to avoid showing partial tags
+            holdBuf += chunk;
+            // Strip complete tags
+            holdBuf = holdBuf.replace(tagRe, '');
+            // Check for a partial tag at the end
+            const partialIdx = holdBuf.lastIndexOf('<<');
+            if (partialIdx >= 0 && holdBuf.indexOf('>>', partialIdx) < 0) {
+                // Partial tag — flush everything before it, hold the rest
+                const safe = holdBuf.slice(0, partialIdx);
+                holdBuf = holdBuf.slice(partialIdx);
+                if (safe) { onChunk(safe); dispatch('chat_chunk', { text: safe }); }
+            } else {
+                // No partial tag — flush all
+                if (holdBuf) { onChunk(holdBuf); dispatch('chat_chunk', { text: holdBuf }); }
+                holdBuf = '';
+            }
+        } else {
+            onChunk(chunk);
+            dispatch('chat_chunk', { text: chunk });
+        }
     };
 }
 

@@ -40,7 +40,12 @@ def _get_config():
             state.save('models', models)
         _seeded = True
 
-    return {'active_model': active, 'models': models}
+    return {
+        'active_model': active,
+        'models': models,
+        'inject_prompt': state.get('inject_prompt', True),
+        'strip_tags': state.get('strip_tags', False),
+    }
 
 
 def _save_config(cfg):
@@ -207,6 +212,14 @@ async def save_config(**kwargs):
             cfg['models'] = {}
         for model_name, model_cfg in body['models'].items():
             cfg['models'][model_name] = model_cfg
+
+    # Update global avatar settings
+    if 'inject_prompt' in body:
+        state = _get_state()
+        state.save('inject_prompt', bool(body['inject_prompt']))
+    if 'strip_tags' in body:
+        state = _get_state()
+        state.save('strip_tags', bool(body['strip_tags']))
 
     # Update active location
     if 'active_location' in body:
