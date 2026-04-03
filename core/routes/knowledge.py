@@ -967,3 +967,161 @@ async def import_knowledge_tab(request: Request, _=Depends(require_login)):
         imported += 1
 
     return {"imported": imported, "skipped": 0, "tab_id": tab_id, "merged": False}
+
+
+@router.get("/api/knowledge/dedup")
+async def find_duplicates(request: Request, _=Depends(require_login)):
+    """Scan knowledge base for duplicate entries. Returns grouped duplicates.
+
+    Three detection modes:
+    - exact: identical content text
+    - file: same filename in multiple tabs
+    - similar: embedding cosine similarity > threshold
+    """
+    import hashlib
+    import numpy as np
+    from functions import knowledge
+
+    scope = request.query_params.get("scope", "")
+    threshold = float(request.query_params.get("threshold", "0.95"))
+    mode = request.query_params.get("mode", "all")  # exact, file, similar, all
+
+    with knowledge._get_connection() as conn:
+        cursor = conn.cursor()
+
+        scope_filter = "WHERE t.scope = ?" if scope else ""
+        scope_params = (scope,) if scope else ()
+
+        cursor.execute(f'''
+            SELECT e.id, e.tab_id, e.content, e.source_filename, e.chunk_index,
+                   e.embedding, t.name as tab_name, t.scope
+            FROM knowledge_entries e JOIN knowledge_tabs t ON e.tab_id = t.id
+            {scope_filter}
+            ORDER BY t.scope, t.name, e.source_filename, e.chunk_index
+        ''', scope_params)
+        rows = cursor.fetchall()
+
+    if not rows:
+        return {"duplicates": [], "stats": {"total_entries": 0}}
+
+    entries = []
+    for r in rows:
+        entries.append({
+            "id": r[0], "tab_id": r[1], "content": r[2], "filename": r[3],
+            "chunk_index": r[4], "embedding": r[5], "tab_name": r[6], "scope": r[7],
+        })
+
+    results = {"exact": [], "file": [], "similar": []}
+
+    # --- Exact duplicates: identical content ---
+    if mode in ("exact", "all"):
+        by_hash = {}
+        for e in entries:
+            h = hashlib.md5(e["content"].encode()).hexdigest()
+            by_hash.setdefault(h, []).append(e)
+
+        for h, group in by_hash.items():
+            if len(group) > 1:
+                results["exact"].append({
+                    "count": len(group),
+                    "preview": group[0]["content"][:120],
+                    "entries": [{
+                        "id": e["id"], "tab_name": e["tab_name"], "scope": e["scope"],
+                        "filename": e["filename"], "chunk_index": e["chunk_index"],
+                    } for e in group],
+                })
+
+    # --- File duplicates: same filename in different tabs ---
+    if mode in ("file", "all"):
+        by_file = {}
+        for e in entries:
+            if e["filename"]:
+                key = e["filename"]
+                by_file.setdefault(key, {}).setdefault(e["tab_id"], []).append(e)
+
+        for filename, tabs in by_file.items():
+            if len(tabs) > 1:
+                results["file"].append({
+                    "filename": filename,
+                    "tabs": [{
+                        "tab_id": tid, "tab_name": elist[0]["tab_name"],
+                        "scope": elist[0]["scope"], "chunks": len(elist),
+                    } for tid, elist in tabs.items()],
+                })
+
+    # --- Similar entries: embedding cosine > threshold ---
+    if mode in ("similar", "all"):
+        # Only check entries with embeddings, cap at 2000 to avoid O(n^2) explosion
+        with_emb = [e for e in entries if e["embedding"]][:2000]
+        if with_emb:
+            vecs = []
+            for e in with_emb:
+                vecs.append(np.frombuffer(e["embedding"], dtype=np.float32))
+
+            seen_pairs = set()
+            similar_groups = {}  # leader_id -> [member entries]
+
+            for i in range(len(vecs)):
+                for j in range(i + 1, len(vecs)):
+                    # Skip if same tab + same file (those are sequential chunks, not dups)
+                    if (with_emb[i]["tab_id"] == with_emb[j]["tab_id"] and
+                            with_emb[i]["filename"] == with_emb[j]["filename"]):
+                        continue
+
+                    sim = float(np.dot(vecs[i], vecs[j]))
+                    if sim >= threshold:
+                        pair = (with_emb[i]["id"], with_emb[j]["id"])
+                        if pair not in seen_pairs:
+                            seen_pairs.add(pair)
+                            leader = with_emb[i]["id"]
+                            if leader not in similar_groups:
+                                similar_groups[leader] = {
+                                    "score": sim,
+                                    "preview": with_emb[i]["content"][:120],
+                                    "entries": [{
+                                        "id": with_emb[i]["id"], "tab_name": with_emb[i]["tab_name"],
+                                        "scope": with_emb[i]["scope"], "filename": with_emb[i]["filename"],
+                                    }],
+                                }
+                            similar_groups[leader]["entries"].append({
+                                "id": with_emb[j]["id"], "tab_name": with_emb[j]["tab_name"],
+                                "scope": with_emb[j]["scope"], "filename": with_emb[j]["filename"],
+                                "score": round(sim, 3),
+                            })
+
+            results["similar"] = list(similar_groups.values())
+
+    total_dups = len(results["exact"]) + len(results["file"]) + len(results["similar"])
+
+    return {
+        "duplicates": results,
+        "stats": {
+            "total_entries": len(entries),
+            "exact_groups": len(results["exact"]),
+            "file_groups": len(results["file"]),
+            "similar_groups": len(results["similar"]),
+            "total_duplicate_groups": total_dups,
+        },
+    }
+
+
+@router.delete("/api/knowledge/dedup/resolve")
+async def resolve_duplicates(request: Request, _=Depends(require_login)):
+    """Delete specific duplicate entries by ID list. Keeps the first, deletes the rest."""
+    from functions import knowledge
+
+    data = await request.json()
+    delete_ids = data.get("ids", [])
+
+    if not delete_ids:
+        raise HTTPException(status_code=400, detail="No entry IDs provided")
+
+    deleted = 0
+    for eid in delete_ids:
+        try:
+            knowledge.delete_entry(eid)
+            deleted += 1
+        except Exception:
+            pass
+
+    return {"deleted": deleted, "requested": len(delete_ids)}

@@ -5719,6 +5719,19 @@ a.gallery-caption:hover {
     color: var(--text);
     border-color: var(--text-muted);
 }
+/* Duplicate finder */
+.mind-dup-clean { text-align:center; padding:12px; color:var(--color-success, #66bb6a); font-size:var(--font-sm); }
+.mind-dup-header { font-size:var(--font-sm); color:var(--text-muted); padding:8px 0 4px; border-bottom:1px solid var(--border); margin-bottom:8px; }
+.mind-dup-section { margin-bottom:12px; }
+.mind-dup-section h4 { font-size:var(--font-sm); color:#ffa726; margin:0 0 6px; }
+.mind-dup-group { background:var(--bg-primary); border:1px solid var(--border); border-radius:6px; padding:8px 10px; margin-bottom:6px; }
+.mind-dup-preview { font-size:var(--font-xs); color:var(--text-muted); font-family:monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:4px; }
+.mind-dup-entries { font-size:var(--font-xs); margin-bottom:6px; }
+.mind-dup-entry { padding:1px 0; }
+.mind-dup-entry.keep { color:var(--color-success, #66bb6a); }
+.mind-dup-entry.remove { color:#ef5350; }
+.mind-dup-hint { font-size:var(--font-xs); color:var(--text-muted); font-style:italic; }
+
 .mind-del-scope-btn {
     opacity: 0.4;
     transition: opacity 0.15s;

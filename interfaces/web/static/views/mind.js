@@ -746,7 +746,9 @@ async function renderKnowledge(el, tabType) {
         <div class="mind-toolbar">
             ${!isAI ? '<button class="mind-btn" id="mind-new-tab">+ New Category</button>' : ''}
             <button class="mind-btn" id="mind-import-tab">Import</button>
+            <button class="mind-btn" id="mind-find-dups">Find Duplicates</button>
         </div>
+        <div id="mind-dup-results" style="display:none"></div>
         ${tabs.length ? `<div class="mind-list">
             ${tabs.map(t => `
                 <details class="mind-accordion">
@@ -856,6 +858,119 @@ async function renderKnowledge(el, tabType) {
             },
             onDone: async () => { await renderKnowledge(el, tabType); },
         });
+    });
+
+    // Find Duplicates
+    el.querySelector('#mind-find-dups')?.addEventListener('click', async () => {
+        const btn = el.querySelector('#mind-find-dups');
+        const resultsDiv = el.querySelector('#mind-dup-results');
+        if (!resultsDiv) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Scanning...';
+        resultsDiv.style.display = 'block';
+        resultsDiv.innerHTML = '<div class="mind-empty">Scanning for duplicates...</div>';
+
+        try {
+            const resp = await fetch(`/api/knowledge/dedup?scope=${encodeURIComponent(currentScope)}`);
+            if (!resp.ok) throw new Error('Scan failed');
+            const data = await resp.json();
+            const dups = data.duplicates || {};
+            const stats = data.stats || {};
+
+            if (stats.total_duplicate_groups === 0) {
+                resultsDiv.innerHTML = '<div class="mind-dup-clean">No duplicates found</div>';
+                btn.textContent = 'Find Duplicates';
+                btn.disabled = false;
+                return;
+            }
+
+            let html = `<div class="mind-dup-header">Found ${stats.total_duplicate_groups} duplicate group(s) in ${stats.total_entries} entries</div>`;
+
+            // Exact duplicates
+            if (dups.exact?.length) {
+                html += `<div class="mind-dup-section"><h4>Identical Content (${dups.exact.length})</h4>`;
+                for (const group of dups.exact) {
+                    const keep = group.entries[0];
+                    const remove = group.entries.slice(1);
+                    const removeIds = remove.map(e => e.id);
+                    html += `<div class="mind-dup-group">
+                        <div class="mind-dup-preview">${escHtml(group.preview)}</div>
+                        <div class="mind-dup-entries">
+                            <div class="mind-dup-entry keep">Keep: ${escHtml(keep.tab_name)}${keep.filename ? ' / ' + escHtml(keep.filename) : ''}</div>
+                            ${remove.map(e => `<div class="mind-dup-entry remove">Remove: ${escHtml(e.tab_name)}${e.filename ? ' / ' + escHtml(e.filename) : ''} (id:${e.id})</div>`).join('')}
+                        </div>
+                        <button class="mind-btn-sm mind-dup-resolve" data-ids='${JSON.stringify(removeIds)}'>Remove ${remove.length} duplicate(s)</button>
+                    </div>`;
+                }
+                html += '</div>';
+            }
+
+            // File duplicates
+            if (dups.file?.length) {
+                html += `<div class="mind-dup-section"><h4>Same File in Multiple Categories (${dups.file.length})</h4>`;
+                for (const group of dups.file) {
+                    html += `<div class="mind-dup-group">
+                        <div class="mind-dup-preview">${escHtml(group.filename)}</div>
+                        <div class="mind-dup-entries">
+                            ${group.tabs.map(t => `<div class="mind-dup-entry">${escHtml(t.tab_name)} (${t.scope}) — ${t.chunks} chunks</div>`).join('')}
+                        </div>
+                        <div class="mind-dup-hint">Remove duplicates manually from the category above</div>
+                    </div>`;
+                }
+                html += '</div>';
+            }
+
+            // Similar entries
+            if (dups.similar?.length) {
+                html += `<div class="mind-dup-section"><h4>Similar Content (${dups.similar.length})</h4>`;
+                for (const group of dups.similar) {
+                    const keep = group.entries[0];
+                    const remove = group.entries.slice(1);
+                    const removeIds = remove.map(e => e.id);
+                    html += `<div class="mind-dup-group">
+                        <div class="mind-dup-preview">${escHtml(group.preview)}</div>
+                        <div class="mind-dup-entries">
+                            <div class="mind-dup-entry keep">Keep: ${escHtml(keep.tab_name)}${keep.filename ? ' / ' + escHtml(keep.filename) : ''}</div>
+                            ${remove.map(e => `<div class="mind-dup-entry remove">${(e.score * 100).toFixed(0)}% match: ${escHtml(e.tab_name)}${e.filename ? ' / ' + escHtml(e.filename) : ''}</div>`).join('')}
+                        </div>
+                        <button class="mind-btn-sm mind-dup-resolve" data-ids='${JSON.stringify(removeIds)}'>Remove ${remove.length} similar duplicate(s)</button>
+                    </div>`;
+                }
+                html += '</div>';
+            }
+
+            resultsDiv.innerHTML = html;
+
+            // Wire resolve buttons
+            resultsDiv.querySelectorAll('.mind-dup-resolve').forEach(resolveBtn => {
+                resolveBtn.addEventListener('click', async () => {
+                    const ids = JSON.parse(resolveBtn.dataset.ids);
+                    if (!confirm(`Delete ${ids.length} duplicate entry/entries?`)) return;
+                    resolveBtn.disabled = true;
+                    resolveBtn.textContent = 'Removing...';
+                    try {
+                        const resp = await fetch('/api/knowledge/dedup/resolve', {
+                            method: 'DELETE',
+                            headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+                            body: JSON.stringify({ ids }),
+                        });
+                        if (resp.ok) {
+                            const result = await resp.json();
+                            ui.showToast(`Removed ${result.deleted} duplicate(s)`, 'success');
+                            resolveBtn.closest('.mind-dup-group').remove();
+                            // Re-render the tab list to update counts
+                            await renderKnowledge(el, tabType);
+                        }
+                    } catch (e) { ui.showToast('Failed to remove', 'error'); }
+                });
+            });
+
+        } catch (e) {
+            resultsDiv.innerHTML = `<div class="mind-empty" style="color:var(--error)">Scan failed: ${escHtml(e.message)}</div>`;
+        }
+        btn.textContent = 'Find Duplicates';
+        btn.disabled = false;
     });
 
     // Lazy-load entries on accordion open
