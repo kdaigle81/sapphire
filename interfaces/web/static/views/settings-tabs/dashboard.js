@@ -299,7 +299,7 @@ async function loadMissingDeps(el, ctx) {
     if (!card || !list) return;
 
     try {
-        const res = await fetch('/api/plugins');
+        const res = await fetch('/api/webui/plugins');
         if (!res.ok) return;
         const data = await res.json();
         const withDeps = (data.plugins || []).filter(p => p.missing_deps?.length);
