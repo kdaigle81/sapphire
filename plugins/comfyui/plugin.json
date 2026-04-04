@@ -1,0 +1,42 @@
+{
+  "name": "comfyui",
+  "version": "1.0.0",
+  "description": "ComfyUI — generate images using your local ComfyUI server and custom workflows",
+  "author": "sapphire",
+  "icon": "\ud83c\udfa8",
+  "priority": 50,
+  "default_enabled": false,
+  "capabilities": {
+    "tools": ["tools/comfy_tools.py"],
+    "settings": [
+      {
+        "key": "default_workflow",
+        "type": "string",
+        "label": "Default Workflow",
+        "default": "",
+        "help": "Filename (without .json) of the default workflow. Leave empty to use the first one alphabetically."
+      },
+      {
+        "key": "comfy_url",
+        "type": "string",
+        "label": "ComfyUI Server URL",
+        "default": "http://127.0.0.1:8188",
+        "help": "URL of your ComfyUI server"
+      },
+      {
+        "key": "poll_interval",
+        "type": "number",
+        "label": "Poll Interval (seconds)",
+        "default": 2,
+        "help": "How often to check if generation is complete"
+      },
+      {
+        "key": "timeout",
+        "type": "number",
+        "label": "Timeout (seconds)",
+        "default": 300,
+        "help": "Maximum time to wait for image generation"
+      }
+    ]
+  }
+}
