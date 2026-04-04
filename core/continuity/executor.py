@@ -81,6 +81,16 @@ class ContinuityExecutor:
                 parts.append(f"  {line}")
             parts.append("")  # blank line before the trigger message
 
+        # Include chat_id/account for messaging tools (Telegram, Discord)
+        chat_id = obj.get("chat_id")
+        account = obj.get("account")
+        if chat_id:
+            parts.append(f"chat_id: {chat_id}")
+        if account:
+            parts.append(f"account: {account}")
+        if chat_id or account:
+            parts.append("")
+
         # The trigger message itself — emphasized
         if sender:
             parts.append(f">>> {sender}: {text}")

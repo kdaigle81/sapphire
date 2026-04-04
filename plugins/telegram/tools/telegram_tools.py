@@ -78,6 +78,27 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "telegram_send_image",
+            "description": "Send the most recently generated image to a Telegram chat. Use this after generating an image (via comfy_generate, flux_generate, etc.) to share it. You'll see the image too so you can comment on it. The chat_id is provided in daemon event context.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "chat_id": {
+                        "type": ["string", "integer"],
+                        "description": "Telegram chat ID from the daemon event context"
+                    },
+                    "caption": {
+                        "type": "string",
+                        "description": "Caption for the image"
+                    }
+                },
+                "required": ["chat_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "telegram_send_voice",
             "description": "Send a voice note to a Telegram chat. Your message is spoken aloud using TTS and sent as a playable voice bubble. Great for personal messages, reminders, and when voice feels more natural than text.",
             "parameters": {
@@ -156,6 +177,8 @@ def execute(function_name, arguments, config):
             result = telegram_read_messages(arguments, config)
         elif function_name == "telegram_send_voice":
             result = telegram_send_voice(arguments, config)
+        elif function_name == "telegram_send_image":
+            result = telegram_send_image(arguments, config)
         else:
             return f"Unknown function: {function_name}", False
         # Inner functions return error strings on failure
@@ -191,6 +214,56 @@ def telegram_send(args, config):
     except Exception as e:
         logger.error(f"[TELEGRAM] Send failed: {e}")
         return f"Failed to send message: {e}"
+
+
+def telegram_send_image(args, config):
+    ready = _check_ready()
+    if isinstance(ready, str):
+        return ready
+    client, loop = ready
+
+    chat_id = args.get("chat_id")
+    caption = args.get("caption")
+
+    if not chat_id:
+        return "Missing chat_id — check the daemon event context"
+
+    try:
+        try:
+            chat_id = int(chat_id)
+        except (ValueError, TypeError):
+            pass
+
+        # Grab most recent tool image
+        from pathlib import Path
+        import base64
+        img_dir = Path(__file__).parent.parent.parent.parent / "user" / "tool_images"
+        image_bytes = None
+        if img_dir.exists():
+            images = sorted(img_dir.glob("*.*"), key=lambda f: f.stat().st_mtime, reverse=True)
+            if images:
+                image_bytes = images[0].read_bytes()
+
+        if not image_bytes:
+            return "No recent images found — generate an image first with comfy_generate or flux_generate"
+
+        # Send to Telegram
+        from plugins.telegram.daemon import send_photo
+        future = asyncio.run_coroutine_threadsafe(
+            send_photo(_get_account(), chat_id, image_bytes, caption=caption),
+            loop
+        )
+        future.result(timeout=30)
+
+        # Return the image so Sapphire can see it and comment
+        b64 = base64.b64encode(image_bytes).decode()
+        return {
+            "text": f"Image sent to {chat_id}" + (f" — {caption}" if caption else ""),
+            "images": [{"data": b64, "media_type": "image/jpeg"}]
+        }
+    except Exception as e:
+        logger.error(f"[TELEGRAM] Image send failed: {e}")
+        return f"Failed to send image: {e}"
 
 
 def telegram_send_voice(args, config):

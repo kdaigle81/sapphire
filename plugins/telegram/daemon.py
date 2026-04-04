@@ -246,10 +246,21 @@ async def send_voice_note(account_name: str, chat_id: int, audio_bytes: bytes):
     if not client:
         raise RuntimeError(f"Account '{account_name}' not connected")
 
-    # Telethon accepts file-like objects with voice_note=True
     voice_file = io.BytesIO(audio_bytes)
-    voice_file.name = "voice.ogg"  # Telegram expects ogg/opus for voice notes
+    voice_file.name = "voice.ogg"
     await client.send_file(chat_id, voice_file, voice_note=True)
+
+
+async def send_photo(account_name: str, chat_id: int, image_bytes: bytes, caption: str = None):
+    """Send a photo via a specific account."""
+    import io
+    client = _clients.get(account_name)
+    if not client:
+        raise RuntimeError(f"Account '{account_name}' not connected")
+
+    photo_file = io.BytesIO(image_bytes)
+    photo_file.name = "image.jpg"
+    await client.send_file(chat_id, photo_file, caption=caption)
 
 
 async def _connect_single(account_name: str):
