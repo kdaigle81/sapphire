@@ -29,6 +29,12 @@ export function initNavRail() {
                 e.stopPropagation();
                 // Close other flyouts
                 rail.querySelectorAll('.nav-group-parent').forEach(p => p.classList.remove('flyout-open'));
+                // Position flyout vertically
+                const flyout = item.querySelector('.nav-flyout');
+                if (flyout) {
+                    const rect = item.getBoundingClientRect();
+                    flyout.style.top = rect.top + 'px';
+                }
                 item.classList.add('flyout-open');
                 return;
             }
@@ -44,6 +50,12 @@ export function initNavRail() {
         parent.addEventListener('mouseenter', () => {
             if (isMobile()) return;
             clearTimeout(hoverTimer);
+            // Position the flyout vertically to match the parent button
+            const flyout = parent.querySelector('.nav-flyout');
+            if (flyout) {
+                const rect = parent.getBoundingClientRect();
+                flyout.style.top = rect.top + 'px';
+            }
             parent.classList.add('flyout-open');
         });
         parent.addEventListener('mouseleave', () => {
