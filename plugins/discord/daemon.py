@@ -256,7 +256,7 @@ async def _connect_single(account_name: str, token: str = None):
 
         # If no task accepted (all filtered/mismatched), stop the typing indicator
         if not accepted and mentioned:
-            _stop_typing(str(message.channel.id))
+            _stop_typing(message.channel.id)
 
     # Start client with retry on rate limit
     async def _start_with_retry():

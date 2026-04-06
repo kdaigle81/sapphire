@@ -602,6 +602,10 @@ class StreamingChat:
 
                     return
             
+            # If cancelled, don't make another API call — fall through to finally block
+            if self.cancel_flag:
+                return
+
             # Loop exhausted - force final response
             logger.warning(f"[STREAMING] Exceeded max iterations ({config.MAX_TOOL_ITERATIONS}). Forcing final answer.")
             
