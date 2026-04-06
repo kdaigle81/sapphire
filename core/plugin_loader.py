@@ -876,6 +876,7 @@ class PluginLoader:
         enabled_list = self._get_enabled_list()
         new_found = []
         removed = []
+        needs_reload = []
 
         # Collect all plugin names currently on disk
         on_disk = set()
@@ -903,9 +904,7 @@ class PluginLoader:
                             disk_mtime = manifest_path.stat().st_mtime
                             cached_mtime = existing.get("_manifest_mtime", 0)
                             if disk_mtime > cached_mtime and existing.get("loaded"):
-                                logger.info(f"[PLUGINS] Rescan: '{name}' changed on disk, reloading")
-                                self.reload_plugin(name)
-                                new_found.append(f"{name} (reloaded)")
+                                needs_reload.append(name)
                         except Exception:
                             pass
                         continue
@@ -948,6 +947,12 @@ class PluginLoader:
                         self._plugins[name]["enabled"] = False
                         self._remove_from_enabled_list([name])
                         logger.warning(f"[PLUGINS] Rescan: plugin '{name}' failed to load, auto-disabled")
+
+        # Reload plugins whose manifests changed on disk (outside lock to avoid deadlock)
+        for rname in needs_reload:
+            logger.info(f"[PLUGINS] Rescan: '{rname}' changed on disk, reloading")
+            self.reload_plugin(rname)
+            new_found.append(f"{rname} (reloaded)")
 
         # Detect removed plugins (folder deleted while running)
         with self._lock:

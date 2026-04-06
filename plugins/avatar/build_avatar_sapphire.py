@@ -119,9 +119,11 @@ bpy.ops.export_scene.gltf(filepath=argv[1], export_format='GLB',
     try:
         import os
         # Strip conda from env so Blender uses system Python
+        import platform
         env = {k: v for k, v in os.environ.items()
                if k not in ("CONDA_PREFIX", "CONDA_DEFAULT_ENV", "CONDA_EXE")}
-        env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+        if platform.system() != "Windows":
+            env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
 
         result = subprocess.run(
             ["blender", "--background", "--factory-startup", "--python", script_path,

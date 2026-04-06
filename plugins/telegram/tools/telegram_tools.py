@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 ENABLED = True
 EMOJI = '✈️'
-AVAILABLE_FUNCTIONS = ['telegram_send', 'telegram_get_chats', 'telegram_read_messages']
 
 TOOLS = [
     {
@@ -118,6 +117,8 @@ TOOLS = [
         }
     }
 ]
+
+AVAILABLE_FUNCTIONS = [t["function"]["name"] for t in TOOLS]
 
 
 def _get_account():

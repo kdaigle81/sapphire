@@ -266,18 +266,6 @@ class FunctionManager:
                 mode_filter = namespace.get('MODE_FILTER')
 
                 with self._tools_lock:
-                    self.function_modules[module_name] = {
-                        'module': None,
-                        'tools': tools,
-                        'executor': executor,
-                        'available_functions': available_functions or [t['function']['name'] for t in tools],
-                        'emoji': emoji,
-                        '_plugin': plugin_name,
-                    }
-
-                    # Plugin settings live in user/webui/plugins/{name}.json only
-                    # No register_tool_settings — single settings path, no collisions
-
                     # Check for function name conflicts BEFORE mutating state
                     existing_names = {t['function']['name'] for t in self.all_possible_tools}
                     for tool in tools:
@@ -286,6 +274,15 @@ class FunctionManager:
                             owner = self._function_module_map.get(fname, 'unknown')
                             logger.error(f"\033[91mPlugin '{plugin_name}' tool '{fname}' conflicts with existing tool from '{owner}' — plugin NOT loaded\033[0m")
                             raise ValueError(f"Tool name '{fname}' already registered by '{owner}'")
+
+                    self.function_modules[module_name] = {
+                        'module': None,
+                        'tools': tools,
+                        'executor': executor,
+                        'available_functions': available_functions or [t['function']['name'] for t in tools],
+                        'emoji': emoji,
+                        '_plugin': plugin_name,
+                    }
 
                     # Track per-tool flags (safe — conflict check passed)
                     for tool in tools:

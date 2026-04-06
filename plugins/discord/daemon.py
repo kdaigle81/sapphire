@@ -325,7 +325,11 @@ def _stop_typing(channel_id):
     """Stop the typing indicator for a channel."""
     task = _typing_tasks.pop(channel_id, None)
     if task and not task.done():
-        task.cancel()
+        loop = _loop
+        if loop and loop.is_running():
+            loop.call_soon_threadsafe(task.cancel)
+        else:
+            task.cancel()
 
 
 async def send_message(account_name: str, channel_id: int, text: str):

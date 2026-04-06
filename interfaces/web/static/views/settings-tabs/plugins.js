@@ -726,6 +726,7 @@ export default {
                 await ctx.refreshTab();
 
                 window.dispatchEvent(new CustomEvent('functions-changed'));
+                document.dispatchEvent(new CustomEvent('sapphire:plugin_toggled', { detail: data }));
                 // Show sticky toast if plugin enabled but has missing deps
                 if (data.enabled && data.missing_deps?.length) {
                     if (cached) cached.missing_deps = data.missing_deps;

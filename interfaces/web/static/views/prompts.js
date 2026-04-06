@@ -346,9 +346,14 @@ function bindEvents() {
 
             try {
                 // Save under new name, delete old
+                const wasActive = selected === activePromptName;
                 await savePrompt(newName, selectedData);
                 await deletePrompt(selected);
                 selected = newName;
+                if (wasActive) {
+                    await loadPrompt(newName);
+                    activePromptName = newName;
+                }
                 await loadAll();
                 render();
                 ui.showToast(`Renamed to "${newName}"`, 'success');
