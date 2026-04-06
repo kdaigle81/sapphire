@@ -81,6 +81,12 @@ Hey I'm Chris, a solo dev with a burning passion for this project. It's consumed
 - **Interactive fiction** - Story engine with dice, branching choices, and state tracking
 - **Privacy-first AI** - Block all cloud connections, run fully local
 
+## Windows Easy Installer
+This is our beta Windows 11 installer. It installs git, conda, and sapphire. You can use it as a launcher, to troubleshoot, or switch between dev and main branch. 
+
+[Download Sapphire Launcher](https://github.com/ddxfish/sapphire-launcher)
+
+
 ## Quick Start
 
 ### Prerequisites
