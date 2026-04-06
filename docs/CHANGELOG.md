@@ -1,3 +1,7 @@
+# 2.5.4 - Plugin enhancements
+- Discord cooldown, typing..., and @mention support
+- Telegram supports voice clips as returns
+- Duplicate checker for human knowledge
 # 2.5.3 - Status plugin
 - Status plugin for bug reports
 - Sapphire can call status plugin as tool
