@@ -66,6 +66,10 @@ def friendly_llm_error(e):
             return "Model not found or not loaded. If using LM Studio, make sure a model is loaded and running."
         if any(k in error_str for k in ('image', 'vision', 'multimodal', 'content_type')):
             return "This model doesn't support images. Load a vision model to use image attachments."
+        if 'invalid tool call' in error_str or 'tool call arguments' in error_str:
+            return "This provider rejected a tool call in your chat history (strict tool-call validation). Try starting a new chat, or switch to a more lenient provider (OpenAI, Fireworks)."
+        if 'tool' in error_str and any(k in error_str for k in ('not support', "doesn't support", 'unsupported')):
+            return "This model doesn't support tool calls. Switch to a tool-capable model or disable your toolset."
         return f"LLM request rejected (400). {str(e)[:200]}"
 
     if status == 401:

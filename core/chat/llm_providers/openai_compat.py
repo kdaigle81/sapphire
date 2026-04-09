@@ -13,6 +13,7 @@ This is the default provider and your 99% use case.
 """
 
 import hashlib
+import json
 import logging
 from typing import Dict, Any, List, Optional, Generator
 
@@ -348,12 +349,23 @@ class OpenAICompatProvider(BaseProvider):
                 for tc in msg['tool_calls']:
                     if isinstance(tc, dict):
                         func = tc.get('function', {})
-                        
-                        # Get arguments - ensure it's valid JSON
+
+                        # Get arguments - MUST be a valid JSON-encoded string per OpenAI spec.
+                        # Strict providers (Ollama Cloud, etc.) reject dicts or malformed strings.
                         args = func.get('arguments', '{}')
-                        if not args or args == '':
+                        if args is None or args == '':
                             args = '{}'
-                        
+                        elif isinstance(args, dict):
+                            args = json.dumps(args)
+                        elif isinstance(args, str):
+                            try:
+                                json.loads(args)
+                            except (json.JSONDecodeError, ValueError):
+                                logger.warning(f"[OPENAI-COMPAT] Tool call arguments not valid JSON, defaulting to empty: {args[:100]!r}")
+                                args = '{}'
+                        else:
+                            args = '{}'
+
                         # Get tool ID - convert Claude format if needed
                         tool_id = tc.get('id', '')
                         if tool_id.startswith('toolu_'):
@@ -420,7 +432,10 @@ class OpenAICompatProvider(BaseProvider):
 
         if tools:
             request_kwargs["tools"] = self.convert_tools_for_api(tools)
-            request_kwargs["tool_choice"] = "auto"
+            # Note: tool_choice omitted intentionally. Per OpenAI spec, "auto" is the
+            # default when tools are present, so setting it is redundant. Omitting it
+            # reduces the rejection surface with strict OpenAI-compat providers.
+            # (Matches the Anthropic provider, which also never sets tool_choice.)
 
         # Wrap in retry for rate limiting
         response = retry_on_rate_limit(
@@ -480,19 +495,32 @@ class OpenAICompatProvider(BaseProvider):
 
         if tools:
             request_kwargs["tools"] = self.convert_tools_for_api(tools)
-            request_kwargs["tool_choice"] = "auto"
+            # Note: tool_choice omitted intentionally. Per OpenAI spec, "auto" is the
+            # default when tools are present, so setting it is redundant. Omitting it
+            # reduces the rejection surface with strict OpenAI-compat providers.
+            # (Matches the Anthropic provider, which also never sets tool_choice.)
 
         logger.info(f"[OPENAI-COMPAT] Request params: model={request_kwargs.get('model')}, tools={len(request_kwargs.get('tools', []))}")
 
         # Wrap in retry for rate limiting
-        # If stream_options is rejected (local servers like LM Studio/llama.cpp), retry without
+        # If stream_options is rejected (local servers like LM Studio/llama.cpp), retry without.
+        # Narrow the trigger: only retry when the error actually mentions stream_options or
+        # related "unknown parameter" phrasing — NOT on every 400/422, which was catching
+        # unrelated errors (like tool call validation failures) and producing misleading logs.
         try:
             stream = retry_on_rate_limit(
                 self._client.chat.completions.create,
                 **request_kwargs
             )
         except Exception as e:
-            if "stream_options" in str(e).lower() or "unrecognized" in str(e).lower() or (hasattr(e, 'status_code') and e.status_code in (400, 422)):
+            err_str = str(e).lower()
+            looks_like_stream_options_issue = (
+                "stream_options" in err_str
+                or "unrecognized" in err_str
+                or "unknown parameter" in err_str
+                or "unknown field" in err_str
+            )
+            if looks_like_stream_options_issue:
                 logger.info(f"[OPENAI-COMPAT] stream_options rejected, retrying without: {e}")
                 request_kwargs.pop("stream_options", None)
                 try:
