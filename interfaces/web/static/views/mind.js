@@ -2,6 +2,7 @@
 import * as ui from '../ui.js';
 import { showExportDialog, showImportDialog } from '../shared/import-export.js';
 import { setupModalClose } from '../shared/modal.js';
+import { getInitData } from '../shared/init-data.js';
 
 function csrfHeaders(extra = {}) {
     const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
@@ -1374,12 +1375,13 @@ function showDeleteScopeConfirmation2(scopeName, typeLabel, count) {
     execBtn.addEventListener('click', async () => {
         if (input2.value.trim() !== 'DELETE') return;
         const enc = encodeURIComponent(scopeName);
-        const apis = [
-            `/api/memory/scopes/${enc}`,
-            `/api/knowledge/scopes/${enc}`,
-            `/api/knowledge/people/scopes/${enc}`,
-            `/api/goals/scopes/${enc}`
-        ];
+        // Phase 2f: derive the delete API list from /api/init scope_declarations
+        // filtered to Mind-domain scopes (nav_target starts with "mind:"). Was a
+        // hardcoded 4-URL list. New plugin mind scopes get swept automatically.
+        const initData = await getInitData().catch(() => null);
+        const mindDecls = (initData?.scope_declarations || [])
+            .filter(d => d.nav_target?.startsWith('mind:'));
+        const apis = mindDecls.map(d => `${d.endpoint}/${enc}`);
         try {
             const results = await Promise.allSettled(apis.map(url =>
                 fetch(url, {

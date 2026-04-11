@@ -1,10 +1,12 @@
 // views/schedule.js - Triggers view (Time tab + Events tab)
 import { fetchNonHeartbeatTasks, fetchHeartbeats, fetchStatus, fetchMergedTimeline,
-         fetchTasksByType, createTask, updateTask, deleteTask, runTask,
-         fetchMemoryScopes, fetchKnowledgeScopes, fetchPeopleScopes, fetchGoalScopes } from '../shared/continuity-api.js';
+         fetchTasksByType, createTask, updateTask, deleteTask, runTask
+} from '../shared/continuity-api.js';
 import { openTriggerEditor } from '../shared/trigger-editor/editor.js';
 import { describeCron } from '../shared/trigger-editor/trigger-cron.js';
 import { showExportDialog, showImportDialog } from '../shared/import-export.js';
+import { getInitData } from '../shared/init-data.js';
+import { fetchScopeData } from '../shared/scope-dropdowns.js';
 import * as ui from '../ui.js';
 
 let container = null;
@@ -609,7 +611,10 @@ function openEditor(task, type) {
 // ── Import / Export ──
 
 const EXPORT_STRIP_KEYS = ['id', 'last_run', 'last_response', 'created', 'running', 'source', 'handler', 'plugin_dir'];
-const SCOPE_KEYS = ['memory_scope', 'knowledge_scope', 'people_scope', 'goal_scope'];
+// Phase 2h: scope keys are derived dynamically from /api/init scope_declarations —
+// used to be a hardcoded list of 4 (`memory_scope`, `knowledge_scope`, `people_scope`,
+// `goal_scope`). Task imports now validate against all registered scopes including
+// plugin scopes that have since come online.
 
 function buildTaskExport(task) {
     const clean = { ...task };
@@ -635,16 +640,21 @@ function exportTask(task) {
 }
 
 async function importTask(type, allTasks) {
-    // Fetch available scopes for validation
-    const [memScopes, knowScopes, pplScopes, goalScopes] = await Promise.all([
-        fetchMemoryScopes(), fetchKnowledgeScopes(), fetchPeopleScopes(), fetchGoalScopes(),
-    ]);
-    const scopeSets = {
-        memory_scope: new Set(['default', 'none', ...memScopes.map(s => s.name || s)]),
-        knowledge_scope: new Set(['default', 'none', ...knowScopes.map(s => s.name || s)]),
-        people_scope: new Set(['default', 'none', ...pplScopes.map(s => s.name || s)]),
-        goal_scope: new Set(['default', 'none', ...goalScopes.map(s => s.name || s)]),
-    };
+    // Fetch available scopes for import validation — driven by scope_declarations
+    // so plugin scopes participate automatically. (Was hardcoded to 4 mind scopes.)
+    const initData = await getInitData().catch(() => null);
+    const scopeDeclarations = initData?.scope_declarations || [];
+    const scopeFetched = await fetchScopeData(scopeDeclarations);
+    const scopeSets = {};
+    for (const decl of scopeDeclarations) {
+        const items = scopeFetched[decl.key] || [];
+        const valueField = decl.value_field || 'name';
+        scopeSets[`${decl.key}_scope`] = new Set([
+            'default', 'none',
+            ...items.map(s => (typeof s === 'string' ? s : s[valueField] || s.name || ''))
+                   .filter(Boolean)
+        ]);
+    }
 
     const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
     showImportDialog({
@@ -666,11 +676,12 @@ async function importTask(type, allTasks) {
             delete task.last_response;
             delete task.created;
 
-            // Validate scopes — reset to default if they don't exist on this instance
+            // Validate scopes — reset to default if they don't exist on this instance.
+            // Iterates every registered scope key dynamically (was 4 hardcoded).
             const skippedScopes = [];
-            for (const key of SCOPE_KEYS) {
+            for (const key of Object.keys(scopeSets)) {
                 const val = task[key];
-                if (val && scopeSets[key] && !scopeSets[key].has(val)) {
+                if (val && !scopeSets[key].has(val)) {
                     skippedScopes.push(`${key}: "${val}"`);
                     task[key] = 'default';
                 }

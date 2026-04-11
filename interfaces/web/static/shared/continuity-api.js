@@ -70,35 +70,11 @@ export async function fetchLLMProviders() {
   } catch { return { providers: [], metadata: {} }; }
 }
 
-// Fetch memory scopes
-export async function fetchMemoryScopes() {
-  try { const data = await fetchWithTimeout('/api/memory/scopes'); return data.scopes || []; }
-  catch { return []; }
-}
-
-// Fetch knowledge scopes
-export async function fetchKnowledgeScopes() {
-  try { const data = await fetchWithTimeout('/api/knowledge/scopes'); return data.scopes || []; }
-  catch { return []; }
-}
-
-// Fetch people scopes
-export async function fetchPeopleScopes() {
-  try { const data = await fetchWithTimeout('/api/knowledge/people/scopes'); return data.scopes || []; }
-  catch { return []; }
-}
-
-// Fetch goal scopes
-export async function fetchGoalScopes() {
-  try { const data = await fetchWithTimeout('/api/goals/scopes'); return data.scopes || []; }
-  catch { return []; }
-}
-
-// Fetch email accounts
-export async function fetchEmailAccounts() {
-  try { const data = await fetchWithTimeout('/api/email/accounts'); return data.accounts || []; }
-  catch { return []; }
-}
+// Phase 2h: fetchMemoryScopes / fetchKnowledgeScopes / fetchPeopleScopes /
+// fetchGoalScopes / fetchEmailAccounts have been deleted. All scope data now
+// flows through `fetchScopeData(declarations)` in `shared/scope-dropdowns.js`,
+// driven by `/api/init scope_declarations`. Adding a new scope requires no
+// changes to this file — the generic fetcher handles it.
 
 // Fetch tasks filtered by heartbeat
 export async function fetchHeartbeats() {

@@ -416,10 +416,21 @@ export const startTool = (toolId, toolName, args) => {
     Streaming.startTool(toolId, toolName, args, scrollToBottomIfSticky);
 };
 
-// Tool names that affect scope counts
-const GOAL_TOOLS = ['create_goal', 'update_goal', 'delete_goal'];
-const MEMORY_TOOLS = ['save_memory', 'delete_memory'];
-const KNOWLEDGE_TOOLS = ['save_person', 'save_knowledge'];
+// Map of tool name → scope keys the tool writes into. Multiple scopes possible
+// (e.g. save_person affects both knowledge and people dropdowns). When a tool
+// completes, every affected scope's sidebar dropdown gets its counts refreshed.
+// The endpoint for each refresh comes from /api/init scope_declarations, so
+// adding a new plugin scope is zero-touch on the refresh side — only this map
+// needs to know which tools affect which scopes.
+const TOOL_SCOPE_MAP = {
+    'create_goal':    ['goal'],
+    'update_goal':    ['goal'],
+    'delete_goal':    ['goal'],
+    'save_memory':    ['memory'],
+    'delete_memory':  ['memory'],
+    'save_knowledge': ['knowledge'],
+    'save_person':    ['knowledge', 'people'],
+};
 
 const refreshScopeCounts = async (selectId, apiPath) => {
     try {
@@ -436,14 +447,24 @@ const refreshScopeCounts = async (selectId, apiPath) => {
     } catch (e) { /* silent */ }
 };
 
+// Dynamic refresh dispatcher — looks up scope endpoint from /api/init declarations
+// cached by shared/init-data.js (populated on first loadSidebar).
+const refreshScopesForTool = (toolName) => {
+    const scopeKeys = TOOL_SCOPE_MAP[toolName];
+    if (!scopeKeys) return;
+    // Deferred import to avoid circular dependency at module load time
+    import('./shared/init-data.js').then(({ getInitDataSync }) => {
+        const declarations = getInitDataSync()?.scope_declarations || [];
+        for (const key of scopeKeys) {
+            const decl = declarations.find(d => d.key === key);
+            if (decl) refreshScopeCounts(`#sb-${key}-scope`, decl.endpoint);
+        }
+    }).catch(() => { /* silent */ });
+};
+
 export const endTool = (toolId, toolName, result, isError) => {
     Streaming.endTool(toolId, toolName, result, isError, scrollToBottomIfSticky);
-    if (!isError) {
-        if (GOAL_TOOLS.includes(toolName)) refreshScopeCounts('#sb-goal-scope', '/api/goals/scopes');
-        if (MEMORY_TOOLS.includes(toolName)) refreshScopeCounts('#sb-memory-scope', '/api/memory/scopes');
-        if (KNOWLEDGE_TOOLS.includes(toolName)) refreshScopeCounts('#sb-knowledge-scope', '/api/knowledge/scopes');
-        if (toolName === 'save_person') refreshScopeCounts('#sb-people-scope', '/api/knowledge/people/scopes');
-    }
+    if (!isError) refreshScopesForTool(toolName);
 };
 
 export const finishStreaming = async (ephemeral = false) => {

@@ -5,6 +5,12 @@ import { listPersonas, getPersona, createPersona, updatePersona, deletePersona,
          avatarUrl, avatarImg, avatarFallback } from '../shared/persona-api.js';
 import { renderPersonaTabs, bindPersonaTabs } from '../shared/persona-tabs.js';
 import { getInitData } from '../shared/init-data.js';
+import {
+    renderScopeDropdowns,
+    fetchScopeData,
+    populateScopeOptions,
+    readScopeSettingsFromDom
+} from '../shared/scope-dropdowns.js';
 import { showExportDialog, showImportDialog } from '../shared/import-export.js';
 import * as ui from '../ui.js';
 import { updateScene } from '../features/scene.js';
@@ -30,7 +36,10 @@ function updateSliderFill(slider) {
 let initData = null;
 let llmProviders = [];
 let llmMetadata = {};
-let scopeData = { memory: [], goals: [], knowledge: [], people: [] };
+// Phase 2e: scope dropdowns are now driven by /api/init scope_declarations
+// via the shared scope-dropdowns renderer. Was hardcoded {memory, goals, knowledge, people}.
+let scopeDeclarations = [];
+let scopeFetchedData = {};
 let voicesData = null;
 
 export default {
@@ -77,14 +86,15 @@ export default {
 
 async function loadData() {
     try {
-        const [pRes, init, llmResp, memS, goalS, knowS, pplS, ttsResp] = await Promise.allSettled([
+        // Fetch init data first so we know which scope_declarations to drive from
+        const initEarly = await getInitData();
+        scopeDeclarations = initEarly?.scope_declarations || [];
+
+        const [pRes, init, llmResp, scopeResp, ttsResp] = await Promise.allSettled([
             listPersonas(),
-            getInitData(),
+            Promise.resolve(initEarly),  // already awaited above
             fetch('/api/llm/providers').then(r => r.ok ? r.json() : null),
-            fetch('/api/memory/scopes').then(r => r.ok ? r.json() : null),
-            fetch('/api/goals/scopes').then(r => r.ok ? r.json() : null),
-            fetch('/api/knowledge/scopes').then(r => r.ok ? r.json() : null),
-            fetch('/api/knowledge/people/scopes').then(r => r.ok ? r.json() : null),
+            fetchScopeData(scopeDeclarations),
             fetch('/api/tts/voices').then(r => r.ok ? r.json() : null)
         ]);
 
@@ -97,12 +107,7 @@ async function loadData() {
             llmProviders = llmData.providers || [];
             llmMetadata = llmData.metadata || {};
         }
-        scopeData = {
-            memory: memS.status === 'fulfilled' ? (memS.value?.scopes || []) : [],
-            goals: goalS.status === 'fulfilled' ? (goalS.value?.scopes || []) : [],
-            knowledge: knowS.status === 'fulfilled' ? (knowS.value?.scopes || []) : [],
-            people: pplS.status === 'fulfilled' ? (pplS.value?.scopes || []) : []
-        };
+        scopeFetchedData = scopeResp.status === 'fulfilled' ? scopeResp.value : {};
         voicesData = ttsResp.status === 'fulfilled' ? ttsResp.value : null;
 
         if (!selectedName && personas.length) selectedName = personas[0].name;
@@ -151,6 +156,27 @@ function render() {
     `;
 
     bindPersonaTabs(container);
+
+    // Mount shared scope dropdowns (Phase 2e) — must run BEFORE bindEvents so the
+    // fresh <select> elements get auto-save change listeners. renderScopeDropdowns
+    // is synchronous; populateScopeOptions is async but the seed values in the
+    // initial render already reflect the persona's current scope settings, so the
+    // UI is correct immediately — populate just fills in the full option lists.
+    const scopeContainer = container.querySelector('#pa-scope-dropdowns');
+    if (scopeContainer && scopeDeclarations.length) {
+        const enabledPlugins = new Set(initData?.plugins_config?.enabled || []);
+        const rendererOptions = {
+            idPrefix: 'pa-s-',
+            enabledPlugins,
+            cssClasses: { field: 'pa-field', fieldRow: 'pa-field-row' },
+        };
+        const settings = selectedData?.settings || {};
+        renderScopeDropdowns(scopeContainer, scopeDeclarations, settings, rendererOptions);
+        // Fire-and-forget populate; listeners are on the <select> elements which
+        // survive innerHTML replacement of their children.
+        populateScopeOptions(scopeContainer, scopeDeclarations, scopeFetchedData, settings, rendererOptions);
+    }
+
     bindEvents();
 }
 
@@ -277,10 +303,7 @@ function renderDetail(p, isActive) {
                     <div class="pa-fence-heading"><span>Mind Scopes</span></div>
                     <div class="pa-fence">
                         <div class="pa-fence-body pa-fence-body-grid">
-                            ${renderScopeField('memory_scope', 'Memory', s, scopeData.memory)}
-                            ${renderScopeField('goal_scope', 'Goals', s, scopeData.goals)}
-                            ${renderScopeField('knowledge_scope', 'Knowledge', s, scopeData.knowledge)}
-                            ${renderScopeField('people_scope', 'People', s, scopeData.people)}
+                            <div id="pa-scope-dropdowns"></div>
                         </div>
                     </div>
                 </div>
@@ -361,18 +384,8 @@ function renderProviderOptions(current) {
     return html;
 }
 
-function renderScopeField(key, label, settings, scopes) {
-    const current = settings[key] || 'default';
-    const opts = scopes.map(s =>
-        `<option value="${s.name}"${s.name === current ? ' selected' : ''}>${s.name} (${s.count})</option>`
-    ).join('') || `<option value="${current}">${current}</option>`;
-    return `
-        <div class="pa-field">
-            <label>${label}</label>
-            <select id="pa-s-${key}" data-key="${key}">${opts}</select>
-        </div>
-    `;
-}
+// renderScopeField deleted in Phase 2e — persona Mind Scopes are now rendered by
+// the shared scope-dropdowns.js module driven by /api/init scope_declarations.
 
 function updateModelSelector(providerKey, currentModel) {
     const group = container.querySelector('#pa-model-group');
@@ -734,6 +747,12 @@ function collectSettings() {
     const get = (id) => container.querySelector(`#pa-s-${id}`)?.value || '';
     const getChecked = (id) => container.querySelector(`#pa-s-${id}`)?.checked || false;
 
+    // Phase 2e: scope values come from the shared renderer's DOM via data-scope-key
+    // attribute discovery. Supports all 9 scopes dynamically — pre-existing silent
+    // bug fixed for free (telegram_scope and discord_scope can now be saved on personas).
+    const scopeContainer = container.querySelector('#pa-scope-dropdowns');
+    const scopeFields = readScopeSettingsFromDom(scopeContainer, { missingValue: 'default' });
+
     return {
         prompt: get('prompt'),
         toolset: get('toolset'),
@@ -748,10 +767,7 @@ function collectSettings() {
         llm_primary: get('llm_primary') || 'auto',
         llm_model: getSelectedModel(),
         trim_color: get('trim_color') || '#4a9eff',
-        memory_scope: get('memory_scope') || 'default',
-        goal_scope: get('goal_scope') || 'default',
-        knowledge_scope: get('knowledge_scope') || 'default',
-        people_scope: get('people_scope') || 'default',
+        ...scopeFields,
         story_engine_enabled: selectedData?.settings?.story_engine_enabled ?? false,
         story_preset: selectedData?.settings?.story_preset ?? null,
         story_vars_in_prompt: selectedData?.settings?.story_vars_in_prompt ?? false,
