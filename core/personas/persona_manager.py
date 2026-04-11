@@ -70,41 +70,45 @@ class PersonaManager:
         self._load()
 
     def _load(self):
-        """Load personas from user file, seeding from core defaults if needed."""
+        """Load personas from user file. Seeds from core defaults on first run only.
+
+        After first run, user/personas/personas.json is authoritative — deleted
+        personas stay deleted. Use merge_defaults() for explicit user-initiated
+        restore of built-ins from the Backup UI.
+        """
         user_path = self.USER_DIR / "personas.json"
-        core_path = self.BASE_DIR / "personas.json"
 
-        core_personas = {}
-        try:
-            with open(core_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            core_personas = {k: v for k, v in data.items() if not k.startswith('_')}
-        except Exception as e:
-            logger.error(f"Failed to load core personas: {e}")
-
-        self._personas = {}
         if user_path.exists():
+            # User file is authoritative — no re-seeding on boot
             try:
                 with open(user_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 self._personas = {k: v for k, v in data.items() if not k.startswith('_')}
             except Exception as e:
                 logger.error(f"Failed to load user personas: {e}")
+                self._personas = {}
+            logger.info(f"Loaded {len(self._personas)} personas")
+            return
 
-        # Seed missing personas from core defaults
-        seeded = 0
-        for name, persona in core_personas.items():
-            if name not in self._personas:
-                self._personas[name] = persona
-                # Copy built-in avatar to user dir if it exists
-                self._seed_avatar(persona.get('avatar'))
-                seeded += 1
+        # First run — seed from core defaults
+        core_path = self.BASE_DIR / "personas.json"
+        try:
+            with open(core_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            self._personas = {k: v for k, v in data.items() if not k.startswith('_')}
+        except Exception as e:
+            logger.error(f"Failed to load core personas: {e}")
+            self._personas = {}
 
-        if seeded > 0:
-            logger.info(f"Seeded {seeded} new personas from defaults")
+        # Copy built-in avatars into user dir
+        for persona in self._personas.values():
+            self._seed_avatar(persona.get('avatar'))
+
+        if self._personas:
             self._save_to_user()
-
-        logger.info(f"Loaded {len(self._personas)} personas")
+            logger.info(f"First run — seeded {len(self._personas)} personas from defaults")
+        else:
+            logger.info("Loaded 0 personas")
 
     def _seed_avatar(self, avatar_filename):
         """Copy a built-in avatar to user avatars if not already there."""
