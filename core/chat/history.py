@@ -1181,7 +1181,18 @@ class ChatSessionManager:
             return []
 
     def append_to_chat(self, chat_name: str, user_content: str, assistant_content: str):
-        """Append a message pair to a named chat WITHOUT switching active chat."""
+        """Append a simple message pair to a named chat WITHOUT switching active chat."""
+        self.append_messages_to_chat(chat_name, [
+            {"role": "user", "content": user_content},
+            {"role": "assistant", "content": assistant_content},
+        ])
+
+    def append_messages_to_chat(self, chat_name: str, new_messages: list):
+        """Append a list of messages to a named chat WITHOUT switching active chat.
+
+        Preserves the full conversation structure including tool_calls and tool
+        results. Each message gets a timestamp if it doesn't already have one.
+        """
         self._ensure_db()
         timestamp = datetime.now().isoformat()
         try:
@@ -1194,21 +1205,23 @@ class ChatSessionManager:
                     logger.warning(f"Chat '{chat_name}' not found — skipping append (may have been deleted)")
                     return
                 messages = json.loads(row["messages"])
-                messages.append({"role": "user", "content": user_content, "timestamp": timestamp})
-                messages.append({"role": "assistant", "content": assistant_content, "timestamp": timestamp})
+
+                for msg in new_messages:
+                    if 'timestamp' not in msg:
+                        msg['timestamp'] = timestamp
+                    messages.append(msg)
+
                 conn.execute(
                     """UPDATE chats SET messages = ?, updated_at = ? WHERE name = ?""",
                     (json.dumps(messages), timestamp, chat_name)
                 )
                 conn.commit()
-                logger.debug(f"Appended message pair to chat '{chat_name}'")
+                logger.debug(f"Appended {len(new_messages)} messages to chat '{chat_name}'")
 
-                # If this is the active chat, append to in-memory list instead of
-                # replacing it — replacing would wipe any unsaved user/assistant messages
-                # from the streaming pipeline that are in the in-memory list but not yet in DB
+                # If this is the active chat, sync in-memory list
                 if chat_name == self.active_chat_name:
-                    self.current_chat.messages.append({"role": "user", "content": user_content, "timestamp": timestamp})
-                    self.current_chat.messages.append({"role": "assistant", "content": assistant_content, "timestamp": timestamp})
+                    for msg in new_messages:
+                        self.current_chat.messages.append(msg)
 
                 publish(Events.MESSAGE_ADDED, {"role": "pair", "chat_name": chat_name})
         except Exception as e:

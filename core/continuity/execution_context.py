@@ -167,6 +167,11 @@ class ExecutionContext:
     def run(self, user_input: str, history_messages: List[Dict] = None) -> str:
         """Run LLM + tool loop in complete isolation. Returns response text.
 
+        After run() completes, self.new_messages contains all messages generated
+        during this execution (user, assistant w/ tool_calls, tool results, final
+        assistant). Callers can use this to persist the full conversation including
+        tool calls — not just the final response.
+
         Args:
             user_input: The user/event message
             history_messages: Optional prior messages for foreground chat continuity.
@@ -178,13 +183,16 @@ class ExecutionContext:
         if history_messages is not None:
             # Foreground mode — use existing chat history
             messages = [{"role": "system", "content": self.system_prompt}] + history_messages
+            # Track where new messages start BEFORE adding the user message
+            msg_start_idx = len(messages)
             messages.append({"role": "user", "content": user_input})
         else:
             # Ephemeral — no history
             messages = [
                 {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": user_input}
             ]
+            msg_start_idx = len(messages)
+            messages.append({"role": "user", "content": user_input})
 
         max_iterations = self.task_settings.get("max_tool_rounds") or config.MAX_TOOL_ITERATIONS
         max_parallel = self.task_settings.get("max_parallel_tools") or config.MAX_PARALLEL_TOOLS
@@ -193,7 +201,6 @@ class ExecutionContext:
         logger.info(f"[ExecCtx] Running: provider='{self.provider_key}', "
                      f"tools={len(self.tools) if self.tools else 0}, "
                      f"history={len(history_messages) if history_messages else 0} msgs")
-
         final_content = None
 
         for i in range(max_iterations):
@@ -240,6 +247,7 @@ class ExecutionContext:
                     continue
 
                 final_content = response_msg.content
+                messages.append({"role": "assistant", "content": final_content})
                 break
             else:
                 logger.warning("[ExecCtx] Empty response from LLM")
@@ -250,5 +258,8 @@ class ExecutionContext:
             last = messages[-1]
             if last.get("role") == "assistant" and last.get("content"):
                 final_content = last["content"]
+
+        # Expose all messages generated during this run (user + tool calls + tool results + final)
+        self.new_messages = messages[msg_start_idx:]
 
         return final_content or ""

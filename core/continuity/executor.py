@@ -375,8 +375,15 @@ class ContinuityExecutor:
                 # Run through isolated ExecutionContext — no singleton contact
                 response = ctx.run(msg, history_messages=history_messages)
 
-                # Persist both messages to target chat WITHOUT switching active chat
-                session_manager.append_to_chat(target_chat, msg, response or "")
+                # Persist the FULL conversation (including tool calls + results)
+                # to the target chat. ctx.new_messages has everything generated
+                # during this run: user msg, assistant+tool_calls, tool results,
+                # and the final assistant response — not just the bookends.
+                if hasattr(ctx, 'new_messages') and ctx.new_messages:
+                    session_manager.append_messages_to_chat(target_chat, ctx.new_messages)
+                else:
+                    # Fallback to simple pair if new_messages not available
+                    session_manager.append_to_chat(target_chat, msg, response or "")
 
                 if response_cb and response:
                     try: response_cb(response)
