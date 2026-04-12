@@ -90,15 +90,10 @@ class TestGetMergedPlugins:
         assert "core-a" in result["plugins"]
         assert "user-b" in result["plugins"]
 
-    @pytest.mark.xfail(reason="BUG: _get_merged_plugins() early-returns when no user "
-                              "file exists, skipping the LOCKED_PLUGINS enforcement "
-                              "loop. Locked plugins only work if user/webui/plugins.json "
-                              "exists. Fix: move the lock enforcement before the early return.",
-                       strict=True)
     def test_locked_plugins_always_enabled(self, setup_plugins, monkeypatch):
-        """This test documents a real bug: if there's no user plugins.json file,
-        the LOCKED_PLUGINS list is never checked. The early return on line 48
-        of core/routes/plugins.py skips the loop that appends locked plugins."""
+        """LOCKED_PLUGINS must be enforced even when no user plugins.json exists.
+        Previously xfail — fixed by extracting _enforce_locked() and calling it
+        before all return paths."""
         dirs, mod = setup_plugins
         static = {"enabled": [], "plugins": {}}
         (dirs.static / "plugins.json").write_text(json.dumps(static), encoding='utf-8')

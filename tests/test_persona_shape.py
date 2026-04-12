@@ -83,40 +83,22 @@ def test_persona_settings_have_core_memory_scopes(persona_key):
             f"{persona_key}: settings missing core memory scope key '{key}'"
 
 
-@pytest.mark.xfail(reason="Known gap: built-in personas predate plugin scopes "
-                          "(email/bitcoin/gcal/telegram/discord). Adding values "
-                          "for these is a Phase 5 cleanup item.",
-                   strict=False)
-def test_known_scope_gap_personas_missing_plugin_scope_keys():
-    """DOCUMENTED FAILURE — flags the persona/scope gap without breaking the suite.
+def test_agent_persona_has_all_scope_keys():
+    """The agent persona must declare ALL scope keys explicitly (including plugin
+    scopes set to 'none') because background agents should never silently inherit
+    a chat's email/telegram/etc. scope.
 
-    Built-in personas in core/personas/personas.json were authored before the
-    Phase 3-4 plugin scope work, so most of them don't declare email_scope,
-    bitcoin_scope, gcal_scope, etc. The 'agent' persona DOES declare them all
-    (it was added in Phase 5).
-
-    PYTEST PRIMER — xfail
-    ─────────────────────
-    `@pytest.mark.xfail` marks a test as "expected to fail." It still runs;
-    if it fails, that counts as a pass (XFAIL). If it unexpectedly *passes*
-    (the gap got fixed), it shows as XPASS — a signal that you can promote
-    it from xfail to a real test. `strict=False` means XPASS doesn't fail
-    the suite, just shows up in the summary.
-
-    Use xfail when: the gap is real and you want it visible in test output,
-    but fixing it is out of scope for the current change.
+    Other personas intentionally OMIT plugin scopes (email, bitcoin, gcal, telegram,
+    discord) so they don't override per-chat user configuration when applied.
     """
     from core.chat.function_manager import scope_setting_keys
 
-    missing = {}
-    for persona_key, persona in CORE_PERSONAS.items():
-        settings = persona["settings"]
-        gaps = [k for k in scope_setting_keys() if k not in settings]
-        if gaps:
-            missing[persona_key] = gaps
-
+    agent = CORE_PERSONAS.get("agent")
+    assert agent is not None
+    settings = agent["settings"]
+    missing = [k for k in scope_setting_keys() if k not in settings]
     assert not missing, \
-        f"Personas missing scope keys: {missing}"
+        f"Agent persona missing scope keys (agents must opt out explicitly): {missing}"
 
 
 def test_agent_persona_exists_in_core():

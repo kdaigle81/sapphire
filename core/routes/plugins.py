@@ -35,6 +35,14 @@ USER_PLUGIN_SETTINGS_DIR = USER_WEBUI_DIR / 'plugins'
 LOCKED_PLUGINS = []
 
 
+def _enforce_locked(result):
+    """Ensure LOCKED_PLUGINS are always in the enabled list."""
+    for locked in LOCKED_PLUGINS:
+        if locked not in result["enabled"]:
+            result["enabled"].append(locked)
+    return result
+
+
 def _get_merged_plugins():
     """Merge static and user plugins.json."""
     static_plugins_json = STATIC_DIR / 'core-ui' / 'plugins.json'
@@ -45,13 +53,13 @@ def _get_merged_plugins():
         static = {"enabled": [], "plugins": {}}
 
     if not USER_PLUGINS_JSON.exists():
-        return static
+        return _enforce_locked(static)
 
     try:
         with open(USER_PLUGINS_JSON, encoding='utf-8') as f:
             user = json.load(f)
     except Exception:
-        return static
+        return _enforce_locked(static)
 
     merged = {
         "enabled": user.get("enabled", static.get("enabled", [])),
@@ -60,11 +68,7 @@ def _get_merged_plugins():
     if "plugins" in user:
         merged["plugins"].update(user["plugins"])
 
-    for locked in LOCKED_PLUGINS:
-        if locked not in merged["enabled"]:
-            merged["enabled"].append(locked)
-
-    return merged
+    return _enforce_locked(merged)
 
 
 @router.get("/api/webui/plugins")
