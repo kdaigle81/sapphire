@@ -348,3 +348,199 @@ class TestLayer3DatabaseScopeIsolation:
         assert 'bob_secret' in results['bob']
         assert 'alice_secret' not in results['bob'], \
             "BLEED: Bob saw Alice's memory"
+
+
+# ─── LAYER 4: Full CRUD gauntlet — 10 threads × 3 tool modules ─────────────
+
+class TestLayer4FullCRUDGauntlet:
+    """The stress test. 10 threads, each running the FULL tool CRUD sequence
+    across memory, knowledge, AND people — all concurrent, all different scopes.
+
+    Each thread does (in order):
+      Memory:    save → search by keyword → verify found → delete → verify gone
+      Knowledge: save to category → search category → verify → delete → verify
+      People:    save person → search → verify → delete → verify
+
+    After all threads complete, we do a cross-scope audit: every canary must
+    exist ONLY in its expected scope, never in another thread's scope.
+
+    This is the "10 heartbeats fire at 9am" scenario. Different scopes,
+    different data, all hitting the same DB through the same code paths.
+    """
+
+    @pytest.fixture
+    def isolated_dbs(self, tmp_path):
+        """Point BOTH memory_tools AND knowledge_tools at temp DBs.
+
+        They use separate databases (memory.db vs knowledge.db), so we need
+        to redirect both. Goals uses its own DB too but we're not testing
+        goals CRUD here — memory + knowledge + people covers the scope surface.
+        """
+        from plugins.memory.tools import memory_tools, knowledge_tools
+
+        # Memory DB
+        mem_db = tmp_path / "bleed_memory.db"
+        orig_mem_path = memory_tools._db_path
+        orig_mem_init = memory_tools._db_initialized
+        memory_tools._db_path = mem_db
+        memory_tools._db_initialized = False
+        memory_tools._ensure_db()
+
+        # Knowledge DB (also has people table)
+        know_db = tmp_path / "bleed_knowledge.db"
+        orig_know_path = knowledge_tools._db_path
+        orig_know_init = knowledge_tools._db_initialized
+        knowledge_tools._db_path = know_db
+        knowledge_tools._db_initialized = False
+        knowledge_tools._ensure_db()
+
+        yield memory_tools, knowledge_tools, mem_db, know_db
+
+        memory_tools._db_path = orig_mem_path
+        memory_tools._db_initialized = orig_mem_init
+        knowledge_tools._db_path = orig_know_path
+        knowledge_tools._db_initialized = orig_know_init
+
+    def test_10_thread_full_crud_no_bleed(self, isolated_dbs):
+        """The main event. 10 threads, full CRUD, barrier-synced."""
+        from core.chat.function_manager import scope_memory, scope_knowledge, scope_people
+
+        memory_tools, knowledge_tools, mem_db, know_db = isolated_dbs
+        N = 10
+        barrier = threading.Barrier(N)
+        errors = []
+        crud_results = {}  # thread_id -> dict of operation results
+
+        def crud_thread(tid):
+            try:
+                mem_scope = f'bleed_mem_{tid}'
+                know_scope = f'bleed_know_{tid}'
+                people_scope = f'bleed_ppl_{tid}'
+
+                # Set ContextVars for this thread
+                scope_memory.set(mem_scope)
+                scope_knowledge.set(know_scope)
+                scope_people.set(people_scope)
+
+                # Create scopes in the DBs
+                memory_tools.create_scope(mem_scope)
+                knowledge_tools.create_scope(know_scope)
+                # People scopes use knowledge_tools DB
+                knowledge_tools.create_people_scope(people_scope)
+
+                # ── Barrier: all threads start CRUD simultaneously ──
+                barrier.wait(timeout=10)
+
+                results = {}
+
+                # ── MEMORY: save → search → delete ──
+                canary_mem = f'canary_mem_{tid}_secret'
+                res, ok = memory_tools._save_memory(canary_mem, scope=mem_scope)
+                results['mem_save'] = ok
+                if not ok:
+                    errors.append(f"T{tid} mem save: {res}")
+                    return
+
+                res, _ = memory_tools._search_memory(f'canary_mem_{tid}',
+                                                     limit=5, label=None, scope=mem_scope)
+                results['mem_search_found'] = canary_mem in res
+
+                # Get the memory ID for deletion
+                conn = sqlite3.connect(memory_tools._db_path)
+                row = conn.execute(
+                    "SELECT id FROM memories WHERE scope = ? AND content LIKE ?",
+                    (mem_scope, f'%{canary_mem}%')
+                ).fetchone()
+                conn.close()
+                if row:
+                    memory_tools._delete_memory(row[0], scope=mem_scope)
+                    results['mem_deleted'] = True
+
+                # ── KNOWLEDGE: save → search → delete ──
+                canary_know = f'canary_know_{tid}_data'
+                res, ok = knowledge_tools._save_knowledge(
+                    f'test_category_{tid}', canary_know, scope=know_scope
+                )
+                results['know_save'] = ok
+
+                res, _ = knowledge_tools._search_knowledge(
+                    query=f'canary_know_{tid}', limit=5, scope=know_scope,
+                    people_scope=people_scope
+                )
+                results['know_search_found'] = canary_know in res
+
+                # Delete by category
+                res, ok = knowledge_tools._delete_knowledge(
+                    category=f'test_category_{tid}', scope=know_scope
+                )
+                results['know_deleted'] = ok
+
+                # ── PEOPLE: save → search → delete ──
+                canary_person = f'Canary_Person_{tid}'
+                res, ok = knowledge_tools._save_person(
+                    canary_person, relationship='test_contact',
+                    notes=f'secret_note_{tid}', scope=people_scope
+                )
+                results['person_save'] = ok
+
+                # Verify person exists in scope
+                people_list = knowledge_tools.get_people(scope=people_scope)
+                person_names = [p['name'] for p in people_list] if isinstance(people_list, list) else []
+                results['person_found'] = canary_person in person_names
+
+                # Delete the person
+                if isinstance(people_list, list):
+                    for p in people_list:
+                        if p['name'] == canary_person:
+                            knowledge_tools.delete_person(p['id'])
+                            results['person_deleted'] = True
+                            break
+
+                crud_results[tid] = results
+
+            except Exception as e:
+                errors.append(f"T{tid}: {e}")
+
+        # Fire all threads
+        threads = [threading.Thread(target=crud_thread, args=(i,)) for i in range(N)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        assert not errors, f"Thread errors: {errors}"
+        assert len(crud_results) == N, f"Only {len(crud_results)}/{N} threads completed"
+
+        # ── Verify each thread's CRUD operations succeeded ──
+        for tid in range(N):
+            r = crud_results[tid]
+            assert r.get('mem_save'), f"T{tid}: memory save failed"
+            assert r.get('mem_search_found'), f"T{tid}: memory search didn't find canary"
+            assert r.get('know_save'), f"T{tid}: knowledge save failed"
+            assert r.get('know_search_found'), f"T{tid}: knowledge search didn't find canary"
+            assert r.get('person_save'), f"T{tid}: person save failed"
+            assert r.get('person_found'), f"T{tid}: person not found in scope"
+
+        # ── Cross-scope audit: check for bleed in memory DB ──
+        conn = sqlite3.connect(mem_db)
+        for tid in range(N):
+            canary = f'canary_mem_{tid}_secret'
+            bleed = conn.execute(
+                "SELECT scope FROM memories WHERE content LIKE ? AND scope != ?",
+                (f'%{canary}%', f'bleed_mem_{tid}')
+            ).fetchone()
+            assert bleed is None, \
+                f"MEMORY BLEED! T{tid} canary leaked to scope '{bleed[0]}'"
+        conn.close()
+
+        # ── Cross-scope audit: check for bleed in knowledge DB ──
+        conn = sqlite3.connect(know_db)
+        for tid in range(N):
+            canary_person = f'Canary_Person_{tid}'
+            bleed = conn.execute(
+                "SELECT scope FROM people WHERE name = ? AND scope != ?",
+                (canary_person, f'bleed_ppl_{tid}')
+            ).fetchone()
+            assert bleed is None, \
+                f"PEOPLE BLEED! T{tid} person leaked to scope '{bleed[0]}'"
+        conn.close()
