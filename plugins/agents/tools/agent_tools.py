@@ -489,6 +489,12 @@ def _spawn_agent(manager, arguments, ps):
         if session_id:
             kwargs['session_id'] = session_id
 
+    elif agent_type == 'claude_code_plugin':
+        for k in ('plugin_name', 'capabilities', 'context', 'session_id'):
+            v = arguments.get(k)
+            if v:
+                kwargs[k] = v
+
     result = manager.spawn(agent_type, mission, chat_name=chat_name, **kwargs)
     if 'error' in result:
         return result['error'], False

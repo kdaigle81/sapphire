@@ -67,18 +67,25 @@ RAW=$(curl -sk -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF" \
     -X POST "$BASE/api/continuity/tasks/$TASK_ID/run" --max-time 180)
 
 # Extract and display her response
-echo "$RAW" | python3 -c "
+python3 -c "
 import sys, json, re
-d = json.load(sys.stdin)
+
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except json.JSONDecodeError:
+    print('(could not parse response)')
+    sys.exit(0)
+
 for r in d.get('responses', []):
     text = r.get('output', r.get('response', ''))
     if text:
-        # Strip thinking blocks
         text = re.sub(r'<think>.*?</think>\s*', '', text, flags=re.DOTALL)
-        # Strip avatar tags
         text = re.sub(r'<<[^>]+>>\s*', '', text)
-        print(text.strip())
-"
+        cleaned = text.strip()
+        if cleaned:
+            print(cleaned)
+" <<< "$RAW"
 
 # Cleanup task (conversation persists in the chat)
 curl -sk -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF" \
