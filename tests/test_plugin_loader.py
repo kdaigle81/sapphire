@@ -1033,5 +1033,134 @@ class TestNewHookPoints:
             assert event.response == "HELLO WORLD"
 
 
+class TestSysModulesIdempotency:
+    """Phase 4: register_plugin_tools installs plugin tool modules in sys.modules
+    under a canonical name so that subsequent regular-Python imports of the same
+    file resolve to the SAME module object (preventing double-module state split
+    for _db_lock, _db_initialized, _backfill_done, etc.).
+
+    These tests exercise that invariant directly against FunctionManager.
+    """
+
+    def _make_tool_plugin(self, base: Path, name: str, tool_content: str) -> Path:
+        """Create a tiny plugin dir with one tools/<name>_tool.py module."""
+        plugin_dir = base / name
+        tools_dir = plugin_dir / "tools"
+        tools_dir.mkdir(parents=True)
+        # Minimal manifest — not read by register_plugin_tools directly but
+        # good hygiene and lets plugin_loader.scan work too if we want to.
+        (plugin_dir / "plugin.json").write_text(json.dumps({
+            "name": name,
+            "version": "1.0.0",
+            "description": "Idempotency test plugin",
+            "capabilities": {"tools": [f"tools/{name}_tool.py"]},
+        }), encoding="utf-8")
+        (tools_dir / f"{name}_tool.py").write_text(tool_content, encoding="utf-8")
+        return plugin_dir
+
+    def test_register_populates_sys_modules(self, temp_dirs):
+        """After register_plugin_tools, the canonical name is in sys.modules."""
+        from core.chat.function_manager import FunctionManager
+        plugin_dir = self._make_tool_plugin(temp_dirs["plugins"], "idem_a", """
+COUNTER = 0
+TOOLS = [{"type": "function", "function": {"name": "idem_a_ping", "description": "ping", "parameters": {"type": "object", "properties": {}}}}]
+def execute(function_name, arguments, config):
+    global COUNTER
+    COUNTER += 1
+    return f"ok {COUNTER}", True
+""")
+        canonical = "plugins.idem_a.tools.idem_a_tool"
+        sys.modules.pop(canonical, None)
+
+        with patch.object(FunctionManager, "__init__", lambda self: None):
+            fm = FunctionManager()
+            fm._tools_lock = __import__("threading").Lock()
+            fm.function_modules = {}
+            fm.execution_map = {}
+            fm.all_possible_tools = []
+            fm._enabled_tools = []
+            fm._mode_filters = {}
+            fm._network_functions = set()
+            fm._is_local_map = {}
+            fm._function_module_map = {}
+            fm.current_toolset_name = "none"
+            fm.register_plugin_tools("idem_a", plugin_dir, ["tools/idem_a_tool.py"])
+
+        assert canonical in sys.modules, "register_plugin_tools should install canonical name in sys.modules"
+        mod = sys.modules[canonical]
+        assert hasattr(mod, "COUNTER"), "module should carry exec'd namespace symbols"
+        sys.modules.pop(canonical, None)
+
+    def test_register_reuses_existing_sys_modules_entry(self, temp_dirs):
+        """If sys.modules already has the canonical entry, register_plugin_tools
+        REUSES it instead of re-exec'ing — prevents split-state from two module copies."""
+        import types
+        from core.chat.function_manager import FunctionManager
+        plugin_dir = self._make_tool_plugin(temp_dirs["plugins"], "idem_b", """
+_marker = "exec'd"
+TOOLS = [{"type": "function", "function": {"name": "idem_b_ping", "description": "ping", "parameters": {"type": "object", "properties": {}}}}]
+def execute(function_name, arguments, config):
+    return "ok", True
+""")
+        canonical = "plugins.idem_b.tools.idem_b_tool"
+
+        # Pre-seed sys.modules with a stub that has a distinct identity marker
+        stub = types.ModuleType(canonical)
+        stub._marker = "PRE-SEEDED"
+        stub.TOOLS = [{"type": "function", "function": {"name": "idem_b_ping", "description": "ping", "parameters": {"type": "object", "properties": {}}}}]
+        stub.execute = lambda fn, args, cfg: ("pre-seeded", True)
+        sys.modules[canonical] = stub
+
+        try:
+            with patch.object(FunctionManager, "__init__", lambda self: None):
+                fm = FunctionManager()
+                fm._tools_lock = __import__("threading").Lock()
+                fm.function_modules = {}
+                fm.execution_map = {}
+                fm.all_possible_tools = []
+                fm._enabled_tools = []
+                fm._mode_filters = {}
+                fm._network_functions = set()
+                fm._is_local_map = {}
+                fm._function_module_map = {}
+                fm.current_toolset_name = "none"
+                fm.register_plugin_tools("idem_b", plugin_dir, ["tools/idem_b_tool.py"])
+
+            # The module in sys.modules should still be the pre-seeded stub,
+            # not a fresh exec'd module. Its _marker should still be "PRE-SEEDED".
+            assert sys.modules[canonical] is stub, "register_plugin_tools should not replace existing sys.modules entry"
+            assert sys.modules[canonical]._marker == "PRE-SEEDED", "should NOT re-exec"
+        finally:
+            sys.modules.pop(canonical, None)
+
+    def test_unregister_purges_sys_modules(self, temp_dirs):
+        """unregister_plugin_tools must purge sys.modules entries so reload actually reloads."""
+        from core.chat.function_manager import FunctionManager
+        plugin_dir = self._make_tool_plugin(temp_dirs["plugins"], "idem_c", """
+TOOLS = [{"type": "function", "function": {"name": "idem_c_ping", "description": "ping", "parameters": {"type": "object", "properties": {}}}}]
+def execute(function_name, arguments, config):
+    return "ok", True
+""")
+        canonical = "plugins.idem_c.tools.idem_c_tool"
+        sys.modules.pop(canonical, None)
+
+        with patch.object(FunctionManager, "__init__", lambda self: None):
+            fm = FunctionManager()
+            fm._tools_lock = __import__("threading").Lock()
+            fm.function_modules = {}
+            fm.execution_map = {}
+            fm.all_possible_tools = []
+            fm._enabled_tools = []
+            fm._mode_filters = {}
+            fm._network_functions = set()
+            fm._is_local_map = {}
+            fm._function_module_map = {}
+            fm.current_toolset_name = "none"
+            fm.register_plugin_tools("idem_c", plugin_dir, ["tools/idem_c_tool.py"])
+            assert canonical in sys.modules, "sanity: canonical should be registered"
+            fm.unregister_plugin_tools("idem_c")
+            assert canonical not in sys.modules, "unregister should purge sys.modules entry for reload safety"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

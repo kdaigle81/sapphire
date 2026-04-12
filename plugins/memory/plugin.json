@@ -1,0 +1,60 @@
+{
+  "name": "memory",
+  "short_name": "Memory System",
+  "version": "1.0.0",
+  "description": "Long-term memory, knowledge base, goals, and people — Sapphire's Mind",
+  "author": "sapphire",
+  "icon": "\ud83e\udde0",
+  "priority": 0,
+  "default_enabled": true,
+  "essential": true,
+  "capabilities": {
+    "tools": [
+      "tools/memory_tools.py",
+      "tools/knowledge_tools.py",
+      "tools/goals_tools.py"
+    ],
+    "scopes": [
+      {
+        "key": "memory",
+        "label": "memory",
+        "endpoint": "/api/memory/scopes",
+        "data_key": "scopes",
+        "value_field": "name",
+        "name_field": "name",
+        "label_template": "{name} ({count})",
+        "nav_target": "mind:memories"
+      },
+      {
+        "key": "goal",
+        "label": "goals",
+        "endpoint": "/api/goals/scopes",
+        "data_key": "scopes",
+        "value_field": "name",
+        "name_field": "name",
+        "label_template": "{name} ({count})",
+        "nav_target": "mind:goals"
+      },
+      {
+        "key": "knowledge",
+        "label": "knowl.",
+        "endpoint": "/api/knowledge/scopes",
+        "data_key": "scopes",
+        "value_field": "name",
+        "name_field": "name",
+        "label_template": "{name} ({count})",
+        "nav_target": "mind:knowledge"
+      },
+      {
+        "key": "people",
+        "label": "people",
+        "endpoint": "/api/knowledge/people/scopes",
+        "data_key": "scopes",
+        "value_field": "name",
+        "name_field": "name",
+        "label_template": "{name} ({count})",
+        "nav_target": "mind:people"
+      }
+    ]
+  }
+}

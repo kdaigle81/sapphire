@@ -97,7 +97,6 @@ class VoiceChatSystem:
         self._prime_default_prompt()
         self._apply_initial_chat_settings()
         self.init_components()
-        self._cleanup_orphaned_rag()
 
         # Agent system — background workers (types registered by plugins during scan)
         from core.agents import AgentManager
@@ -121,6 +120,16 @@ class VoiceChatSystem:
             fm.update_enabled_functions([fm.current_toolset_name])
             logger.info(f"Toolset '{fm.current_toolset_name}' re-applied after plugin scan")
 
+        # RAG orphan cleanup runs AFTER plugin_loader.scan() (Phase 4 reorder).
+        # Previously this ran at line 100, BEFORE plugin loading, which meant it
+        # imported memory/knowledge via the regular Python import path before the
+        # plugin loader had a chance to install the exec'd module in sys.modules.
+        # That created a double-module hazard (Scout 3 L1). Now cleanup runs in a
+        # fully-initialized environment — memory plugin is registered, sys.modules
+        # has the canonical entry, and the import here resolves to the SAME module
+        # the plugin loader registered.
+        self._cleanup_orphaned_rag()
+
         logger.info(f"System init took: {(time.time() - start_time)*1000:.1f}ms")
 
     @property
@@ -136,7 +145,7 @@ class VoiceChatSystem:
     def _cleanup_orphaned_rag(self):
         """Remove RAG scopes for chats that no longer exist."""
         try:
-            from functions import knowledge
+            from plugins.memory.tools import knowledge_tools as knowledge
             chat_names = [c["name"] for c in self.llm_chat.list_chats()]
             knowledge.cleanup_orphaned_rag_scopes(chat_names)
         except Exception as e:

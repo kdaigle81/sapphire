@@ -244,7 +244,7 @@ def switch_embedding_provider(provider_name):
         _embedder = embedding_registry.create(provider_name or 'none')
     # Reset backfill flag so new provider can re-embed missing memories
     try:
-        import functions.memory as mem
+        import plugins.memory.tools.memory_tools as mem
         mem._backfill_done = False
     except Exception:
         pass

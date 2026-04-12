@@ -155,7 +155,9 @@ TOOLS = [
 def _get_db_path():
     global _db_path
     if _db_path is None:
-        _db_path = Path(__file__).parent.parent / "user" / "goals.db"
+        # Phase 4: depth-independent anchor via config.py (project root).
+        import config
+        _db_path = Path(config.__file__).parent / "user" / "goals.db"
     return _db_path
 
 

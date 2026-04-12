@@ -590,40 +590,14 @@ async def get_init_data(request: Request, _=Depends(require_login), system=Depen
         # Plugins config (merged: static + user overrides)
         plugins_config = _get_merged_plugins()
 
-        # Core scope declarations — the 4 memory-domain scopes that live in `functions/`
-        # and haven't been moved into a plugin yet. Phase 4 will migrate these into the
-        # memory plugin's manifest and this list can be deleted entirely.
+        # Scope declarations — frontend uses this to render scope dropdowns dynamically
+        # in the chat sidebar, trigger editor, persona editor, etc.
         #
-        # The 5 plugin-style scopes (email/bitcoin/gcal/telegram/discord) were moved
-        # into their respective plugin manifests in Phase 3 — they're picked up by the
-        # plugin loop below instead of being hardcoded here.
-        #
-        # `plugin` field is the plugin name a scope belongs to (None = built into core).
-        # The frontend uses this to hide a scope when its owning plugin is disabled.
-        CORE_SCOPE_DECLARATIONS = [
-            {"key": "memory",    "label": "memory",  "plugin": None,
-             "endpoint": "/api/memory/scopes",            "data_key": "scopes",
-             "value_field": "name", "name_field": "name",
-             "label_template": "{name} ({count})", "format_js": None,
-             "nav_target": "mind:memories"},
-            {"key": "goal",      "label": "goals",   "plugin": None,
-             "endpoint": "/api/goals/scopes",             "data_key": "scopes",
-             "value_field": "name", "name_field": "name",
-             "label_template": "{name} ({count})", "format_js": None,
-             "nav_target": "mind:goals"},
-            {"key": "knowledge", "label": "knowl.",  "plugin": None,
-             "endpoint": "/api/knowledge/scopes",         "data_key": "scopes",
-             "value_field": "name", "name_field": "name",
-             "label_template": "{name} ({count})", "format_js": None,
-             "nav_target": "mind:knowledge"},
-            {"key": "people",    "label": "people",  "plugin": None,
-             "endpoint": "/api/knowledge/people/scopes",  "data_key": "scopes",
-             "value_field": "name", "name_field": "name",
-             "label_template": "{name} ({count})", "format_js": None,
-             "nav_target": "mind:people"},
-        ]
-        scope_declarations = list(CORE_SCOPE_DECLARATIONS)
-        # Plugin-declared scopes (populated in Phase 3 when manifests get capabilities.scopes)
+        # After Phase 4: ALL scope declarations come from plugin manifests. The memory
+        # plugin contributes memory/goal/knowledge/people (with `plugin: "memory"`).
+        # The 5 other plugins (email/bitcoin/gcal/telegram/discord) contribute their
+        # own scope each. This loop is now the ONLY source of scope declarations.
+        scope_declarations = []
         for plugin_name, info in plugin_loader._plugins.items():
             if not info.get("loaded") or not info.get("enabled"):
                 continue
@@ -931,7 +905,7 @@ async def delete_chat(chat_name: str, request: Request, _=Depends(require_login)
                 _apply_chat_settings(system, settings)
             # Cleanup per-chat RAG documents
             try:
-                from functions import knowledge
+                from plugins.memory.tools import knowledge_tools as knowledge
                 knowledge.delete_scope(f"__rag__:{chat_name}")
             except Exception:
                 pass

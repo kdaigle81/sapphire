@@ -657,7 +657,7 @@ def _archive_emails(indices):
 
 
 def _get_recipients():
-    from functions.knowledge import get_people
+    from plugins.memory.tools.knowledge_tools import get_people
 
     allow_all = _allow_all_enabled()
 
@@ -749,7 +749,7 @@ def _send_email(recipient_id=None, subject=None, body='', reply_to_index=None, a
 
     # New email mode — resolve from whitelisted contacts
     elif recipient_id is not None:
-        from functions.knowledge import get_people
+        from plugins.memory.tools.knowledge_tools import get_people
 
         people_scope = _get_current_people_scope()
         if people_scope is None:

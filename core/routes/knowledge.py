@@ -47,7 +47,7 @@ async def test_embedding(request: Request, _=Depends(require_login)):
 @router.get("/api/memory/scopes")
 async def get_memory_scopes(request: Request, _=Depends(require_login)):
     """Get list of memory scopes."""
-    from functions import memory
+    from plugins.memory.tools import memory_tools as memory
     scopes = memory.get_scopes()
     return {"scopes": scopes}
 
@@ -56,7 +56,7 @@ async def get_memory_scopes(request: Request, _=Depends(require_login)):
 async def create_memory_scope(request: Request, _=Depends(require_login)):
     """Create a new memory scope."""
     import re
-    from functions import memory
+    from plugins.memory.tools import memory_tools as memory
     data = await request.json()
     name = data.get('name', '').strip().lower()
     if not name or not re.match(r'^[a-z0-9_]{1,32}$', name):
@@ -70,7 +70,7 @@ async def create_memory_scope(request: Request, _=Depends(require_login)):
 @router.delete("/api/memory/scopes/{scope_name}")
 async def delete_memory_scope(scope_name: str, request: Request, _=Depends(require_login)):
     """Delete a memory scope and ALL its memories. Requires confirmation token."""
-    from functions import memory
+    from plugins.memory.tools import memory_tools as memory
     data = await request.json()
     if data.get('confirm') != 'DELETE':
         raise HTTPException(status_code=400, detail="Confirmation required")
@@ -87,7 +87,7 @@ async def delete_memory_scope(scope_name: str, request: Request, _=Depends(requi
 @router.get("/api/goals/scopes")
 async def get_goal_scopes(request: Request, _=Depends(require_login)):
     """Get list of goal scopes."""
-    from functions import goals
+    from plugins.memory.tools import goals_tools as goals
     scopes = goals.get_scopes()
     return {"scopes": scopes}
 
@@ -96,7 +96,7 @@ async def get_goal_scopes(request: Request, _=Depends(require_login)):
 async def create_goal_scope(request: Request, _=Depends(require_login)):
     """Create a new goal scope."""
     import re
-    from functions import goals
+    from plugins.memory.tools import goals_tools as goals
     data = await request.json()
     name = data.get('name', '').strip().lower()
     if not name or not re.match(r'^[a-z0-9_]{1,32}$', name):
@@ -109,7 +109,7 @@ async def create_goal_scope(request: Request, _=Depends(require_login)):
 
 @router.delete("/api/goals/scopes/{scope_name}")
 async def remove_goal_scope(scope_name: str, request: Request, _=Depends(require_login)):
-    from functions import goals
+    from plugins.memory.tools import goals_tools as goals
     data = await request.json()
     if data.get('confirm') != 'DELETE':
         raise HTTPException(status_code=400, detail="Confirmation required")
@@ -121,7 +121,7 @@ async def remove_goal_scope(scope_name: str, request: Request, _=Depends(require
 
 @router.get("/api/goals")
 async def list_goals_api(request: Request, _=Depends(require_login)):
-    from functions import goals
+    from plugins.memory.tools import goals_tools as goals
     scope = request.query_params.get('scope', 'default')
     status = request.query_params.get('status', 'active')
     return {"goals": goals.get_goals_list(scope, status)}
@@ -129,7 +129,7 @@ async def list_goals_api(request: Request, _=Depends(require_login)):
 
 @router.get("/api/goals/{goal_id}")
 async def get_goal_api(goal_id: int, request: Request, _=Depends(require_login)):
-    from functions import goals
+    from plugins.memory.tools import goals_tools as goals
     detail = goals.get_goal_detail(goal_id)
     if not detail:
         raise HTTPException(status_code=404, detail="Goal not found")
@@ -138,7 +138,7 @@ async def get_goal_api(goal_id: int, request: Request, _=Depends(require_login))
 
 @router.post("/api/goals")
 async def create_goal_endpoint(request: Request, _=Depends(require_login)):
-    from functions import goals
+    from plugins.memory.tools import goals_tools as goals
     data = await request.json()
     try:
         goal_id = goals.create_goal_api(
@@ -156,7 +156,7 @@ async def create_goal_endpoint(request: Request, _=Depends(require_login)):
 
 @router.put("/api/goals/{goal_id}")
 async def update_goal_endpoint(goal_id: int, request: Request, _=Depends(require_login)):
-    from functions import goals
+    from plugins.memory.tools import goals_tools as goals
     data = await request.json()
     try:
         goals.update_goal_api(
@@ -175,7 +175,7 @@ async def update_goal_endpoint(goal_id: int, request: Request, _=Depends(require
 
 @router.post("/api/goals/{goal_id}/progress")
 async def add_goal_progress(goal_id: int, request: Request, _=Depends(require_login)):
-    from functions import goals
+    from plugins.memory.tools import goals_tools as goals
     data = await request.json()
     try:
         note_id = goals.add_progress_note(goal_id, data.get('note', ''))
@@ -186,7 +186,7 @@ async def add_goal_progress(goal_id: int, request: Request, _=Depends(require_lo
 
 @router.delete("/api/goals/{goal_id}")
 async def delete_goal_endpoint(goal_id: int, request: Request, _=Depends(require_login)):
-    from functions import goals
+    from plugins.memory.tools import goals_tools as goals
     try:
         title = goals.delete_goal_api(goal_id)
         return {"deleted": goal_id, "title": title}
@@ -200,7 +200,7 @@ async def delete_goal_endpoint(goal_id: int, request: Request, _=Depends(require
 
 @router.get("/api/knowledge/scopes")
 async def get_knowledge_scopes(request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     scopes = knowledge.get_scopes()
     return {"scopes": scopes}
 
@@ -208,7 +208,7 @@ async def get_knowledge_scopes(request: Request, _=Depends(require_login)):
 @router.post("/api/knowledge/scopes")
 async def create_knowledge_scope(request: Request, _=Depends(require_login)):
     import re as _re
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     data = await request.json()
     name = data.get('name', '').strip().lower()
     if not name or not _re.match(r'^[a-z0-9_]{1,32}$', name):
@@ -222,7 +222,7 @@ async def create_knowledge_scope(request: Request, _=Depends(require_login)):
 @router.delete("/api/knowledge/scopes/{scope_name}")
 async def delete_knowledge_scope(scope_name: str, request: Request, _=Depends(require_login)):
     """Delete a knowledge scope, ALL its tabs, and ALL entries. Requires confirmation token."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     data = await request.json()
     if data.get('confirm') != 'DELETE':
         raise HTTPException(status_code=400, detail="Confirmation required")
@@ -234,13 +234,13 @@ async def delete_knowledge_scope(scope_name: str, request: Request, _=Depends(re
 
 @router.get("/api/knowledge/people/scopes")
 async def list_people_scopes(request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     return {"scopes": knowledge.get_people_scopes()}
 
 
 @router.post("/api/knowledge/people/scopes")
 async def create_people_scope(request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     data = await request.json()
     name = data.get('name', '').strip().lower()
     if not name or len(name) > 32:
@@ -251,7 +251,7 @@ async def create_people_scope(request: Request, _=Depends(require_login)):
 
 @router.delete("/api/knowledge/people/scopes/{scope_name}")
 async def remove_people_scope(scope_name: str, request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     data = await request.json()
     if data.get('confirm') != 'DELETE':
         raise HTTPException(status_code=400, detail="Confirmation required")
@@ -263,14 +263,14 @@ async def remove_people_scope(scope_name: str, request: Request, _=Depends(requi
 
 @router.get("/api/knowledge/people")
 async def list_people(request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     scope = request.query_params.get('scope', 'default')
     return {"people": knowledge.get_people(scope)}
 
 
 @router.post("/api/knowledge/people")
 async def save_person(request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     data = await request.json()
     name = data.get('name', '').strip()
     if not name:
@@ -292,7 +292,7 @@ async def save_person(request: Request, _=Depends(require_login)):
 
 @router.delete("/api/knowledge/people/{person_id}")
 async def remove_person(person_id: int, request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     if knowledge.delete_person(person_id):
         return {"deleted": person_id}
     raise HTTPException(status_code=404, detail="Person not found")
@@ -301,7 +301,7 @@ async def remove_person(person_id: int, request: Request, _=Depends(require_logi
 @router.post("/api/knowledge/people/import-vcf")
 async def import_vcf(request: Request, _=Depends(require_login)):
     """Import contacts from a VCF (vCard) file."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     import re
 
     form = await request.form()
@@ -406,7 +406,7 @@ async def import_vcf(request: Request, _=Depends(require_login)):
 
 @router.get("/api/knowledge/tabs")
 async def list_tabs(request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     scope = request.query_params.get('scope', 'default')
     tab_type = request.query_params.get('type')
     return {"tabs": knowledge.get_tabs(scope, tab_type)}
@@ -414,7 +414,7 @@ async def list_tabs(request: Request, _=Depends(require_login)):
 
 @router.get("/api/knowledge/tabs/{tab_id}")
 async def get_tab(tab_id: int, request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     scope = request.query_params.get('scope', 'default')
     entries = knowledge.get_tab_entries(tab_id, scope)
     return {"entries": entries}
@@ -422,7 +422,7 @@ async def get_tab(tab_id: int, request: Request, _=Depends(require_login)):
 
 @router.post("/api/knowledge/tabs")
 async def create_knowledge_tab(request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     data = await request.json()
     name = data.get('name', '').strip()
     scope = data.get('scope', 'default')
@@ -436,7 +436,7 @@ async def create_knowledge_tab(request: Request, _=Depends(require_login)):
 
 @router.put("/api/knowledge/tabs/{tab_id}")
 async def update_knowledge_tab(tab_id: int, request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     data = await request.json()
     if knowledge.update_tab(tab_id, data.get('name'), data.get('description')):
         return {"updated": tab_id}
@@ -445,7 +445,7 @@ async def update_knowledge_tab(tab_id: int, request: Request, _=Depends(require_
 
 @router.delete("/api/knowledge/tabs/{tab_id}")
 async def delete_knowledge_tab(tab_id: int, request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     if knowledge.delete_tab(tab_id):
         return {"deleted": tab_id}
     raise HTTPException(status_code=404, detail="Tab not found")
@@ -453,7 +453,7 @@ async def delete_knowledge_tab(tab_id: int, request: Request, _=Depends(require_
 
 @router.post("/api/knowledge/tabs/{tab_id}/entries")
 async def add_knowledge_entry(tab_id: int, request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     from datetime import datetime
     data = await request.json()
     content = data.get('content', '').strip()
@@ -475,7 +475,7 @@ async def add_knowledge_entry(tab_id: int, request: Request, _=Depends(require_l
 @router.post("/api/knowledge/tabs/{tab_id}/upload")
 async def upload_knowledge_file(tab_id: int, file: UploadFile = File(...), _=Depends(require_login)):
     """Upload a text file into a knowledge tab — chunks and embeds automatically."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
 
     # Verify tab exists
     tab = knowledge.get_tabs_by_id(tab_id)
@@ -519,7 +519,7 @@ async def upload_knowledge_file(tab_id: int, file: UploadFile = File(...), _=Dep
 @router.delete("/api/knowledge/tabs/{tab_id}/file/{filename}")
 async def delete_knowledge_file(tab_id: int, filename: str, _=Depends(require_login)):
     """Delete all entries from a specific uploaded file."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     count = knowledge.delete_entries_by_filename(tab_id, filename)
     if count == 0:
         raise HTTPException(status_code=404, detail="No entries found for that file")
@@ -528,7 +528,7 @@ async def delete_knowledge_file(tab_id: int, filename: str, _=Depends(require_lo
 
 @router.put("/api/knowledge/entries/{entry_id}")
 async def update_knowledge_entry(entry_id: int, request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     data = await request.json()
     content = data.get('content', '').strip()
     if not content:
@@ -540,7 +540,7 @@ async def update_knowledge_entry(entry_id: int, request: Request, _=Depends(requ
 
 @router.delete("/api/knowledge/entries/{entry_id}")
 async def delete_knowledge_entry(entry_id: int, request: Request, _=Depends(require_login)):
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     if knowledge.delete_entry(entry_id):
         return {"deleted": entry_id}
     raise HTTPException(status_code=404, detail="Entry not found")
@@ -553,7 +553,7 @@ async def delete_knowledge_entry(entry_id: int, request: Request, _=Depends(requ
 @router.post("/api/chats/{chat_name}/documents")
 async def upload_chat_document(chat_name: str, file: UploadFile = File(...), _=Depends(require_login)):
     """Upload a document for per-chat RAG context."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
 
     filename = file.filename or 'upload.txt'
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
@@ -613,7 +613,7 @@ async def upload_chat_document(chat_name: str, file: UploadFile = File(...), _=D
 @router.get("/api/chats/{chat_name}/documents")
 async def list_chat_documents(chat_name: str, _=Depends(require_login)):
     """List uploaded documents for a chat."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     rag_scope = f"__rag__:{chat_name}"
     entries = knowledge.get_entries_by_scope(rag_scope)
     return {"documents": entries}
@@ -622,7 +622,7 @@ async def list_chat_documents(chat_name: str, _=Depends(require_login)):
 @router.delete("/api/chats/{chat_name}/documents/{filename:path}")
 async def delete_chat_document(chat_name: str, filename: str, _=Depends(require_login)):
     """Delete a specific document from a chat's RAG scope."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     rag_scope = f"__rag__:{chat_name}"
     count = knowledge.delete_entries_by_scope_and_filename(rag_scope, filename)
     if count == 0:
@@ -641,7 +641,7 @@ async def delete_chat_document(chat_name: str, filename: str, _=Depends(require_
 @router.get("/api/memory/list")
 async def list_memories(request: Request, _=Depends(require_login)):
     """List memories grouped by label for the Mind view."""
-    from functions import memory
+    from plugins.memory.tools import memory_tools as memory
     scope = request.query_params.get('scope', 'default')
     with memory._get_connection() as conn:
         cursor = conn.cursor()
@@ -663,7 +663,7 @@ async def list_memories(request: Request, _=Depends(require_login)):
 @router.put("/api/memory/{memory_id}")
 async def update_memory(memory_id: int, request: Request, _=Depends(require_login)):
     """Update memory content and re-embed."""
-    from functions import memory
+    from plugins.memory.tools import memory_tools as memory
     data = await request.json()
     content = data.get('content', '').strip()
     scope = data.get('scope', 'default')
@@ -699,7 +699,7 @@ async def update_memory(memory_id: int, request: Request, _=Depends(require_logi
 @router.delete("/api/memory/{memory_id}")
 async def delete_memory_api(memory_id: int, request: Request, _=Depends(require_login)):
     """Delete a memory by ID."""
-    from functions import memory
+    from plugins.memory.tools import memory_tools as memory
     scope = request.query_params.get('scope', 'default')
     result, success = memory._delete_memory(memory_id, scope)
     if success:
@@ -714,7 +714,7 @@ async def delete_memory_api(memory_id: int, request: Request, _=Depends(require_
 @router.get("/api/memory/export")
 async def export_memories(request: Request, _=Depends(require_login)):
     """Export all memories in a scope as JSON (no vectors)."""
-    from functions import memory
+    from plugins.memory.tools import memory_tools as memory
     scope = request.query_params.get('scope', 'default')
     with memory._get_connection() as conn:
         cursor = conn.cursor()
@@ -734,7 +734,7 @@ async def export_memories(request: Request, _=Depends(require_login)):
 async def find_duplicate_memories(request: Request, _=Depends(require_login)):
     """Find near-duplicate memories using vector similarity."""
     import numpy as np
-    from functions import memory
+    from plugins.memory.tools import memory_tools as memory
 
     scope = request.query_params.get('scope', 'default')
     default_thresh = getattr(config, 'MEMORY_DEDUP_THRESHOLD', 0.92)
@@ -791,7 +791,7 @@ async def find_duplicate_memories(request: Request, _=Depends(require_login)):
 async def import_memories(request: Request, _=Depends(require_login)):
     """Import memories from JSON export. Skips exact text duplicates."""
     import hashlib
-    from functions import memory
+    from plugins.memory.tools import memory_tools as memory
 
     data = await request.json()
     entries = data.get("entries", [])
@@ -831,7 +831,7 @@ async def import_memories(request: Request, _=Depends(require_login)):
 @router.get("/api/knowledge/people/export")
 async def export_people(request: Request, _=Depends(require_login)):
     """Export all people in a scope as JSON."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     scope = request.query_params.get('scope', 'default')
     people = knowledge.get_people(scope)
     # Strip internal IDs, keep portable fields
@@ -854,7 +854,7 @@ async def export_people(request: Request, _=Depends(require_login)):
 @router.post("/api/knowledge/people/import")
 async def import_people_json(request: Request, _=Depends(require_login)):
     """Import people from JSON export. Skips duplicates by name+email."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
 
     data = await request.json()
     entries = data.get("entries", [])
@@ -896,7 +896,7 @@ async def import_people_json(request: Request, _=Depends(require_login)):
 @router.get("/api/knowledge/tabs/{tab_id}/export")
 async def export_knowledge_tab(tab_id: int, request: Request, _=Depends(require_login)):
     """Export a knowledge tab with all entries as JSON (no vectors)."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
     scope = request.query_params.get('scope', 'default')
     tabs = knowledge.get_tabs(scope)
     tab = next((t for t in tabs if t["id"] == tab_id), None)
@@ -916,7 +916,7 @@ async def export_knowledge_tab(tab_id: int, request: Request, _=Depends(require_
 @router.post("/api/knowledge/tabs/import")
 async def import_knowledge_tab(request: Request, _=Depends(require_login)):
     """Import a knowledge tab from JSON export. Creates tab, adds entries."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
 
     data = await request.json()
     name = (data.get("name") or "").strip()
@@ -980,7 +980,7 @@ async def find_duplicates(request: Request, _=Depends(require_login)):
     """
     import hashlib
     import numpy as np
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
 
     scope = request.query_params.get("scope", "")
     threshold = float(request.query_params.get("threshold", "0.95"))
@@ -1108,7 +1108,7 @@ async def find_duplicates(request: Request, _=Depends(require_login)):
 @router.delete("/api/knowledge/dedup/resolve")
 async def resolve_duplicates(request: Request, _=Depends(require_login)):
     """Delete specific duplicate entries by ID list. Keeps the first, deletes the rest."""
-    from functions import knowledge
+    from plugins.memory.tools import knowledge_tools as knowledge
 
     data = await request.json()
     delete_ids = data.get("ids", [])

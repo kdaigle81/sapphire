@@ -139,8 +139,13 @@ SIMILARITY_THRESHOLD = 0.40
 def _get_db_path():
     global _db_path
     if _db_path is None:
-        project_root = Path(__file__).parent.parent
-        _db_path = project_root / "user" / "memory.db"
+        # Phase 4: anchor DB path to config.py location (project root) instead of
+        # this file's __file__.parent.parent. The old pattern broke when the file
+        # moved from functions/ to plugins/memory/tools/ because the relative
+        # depth changed. config.py sits at project root and is imported by every
+        # consumer, so Path(config.__file__).parent is the stable project root.
+        import config
+        _db_path = Path(config.__file__).parent / "user" / "memory.db"
     return _db_path
 
 

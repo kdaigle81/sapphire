@@ -426,7 +426,7 @@ class LLMChat:
         rag_scope = f"__rag__:{chat_name}"
 
         try:
-            from functions import knowledge
+            from plugins.memory.tools import knowledge_tools as knowledge
             entries = knowledge.get_entries_by_scope(rag_scope)
             if not entries:
                 return None

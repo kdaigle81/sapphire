@@ -19,11 +19,10 @@ logger = logging.getLogger(__name__)
 #
 # Only CORE scopes (rag, private) are hardcoded at module load. Everything else —
 # memory, goal, knowledge, people, email, bitcoin, gcal, telegram, discord — is
-# registered dynamically by plugins via register_plugin_scope(). The 5 plugin
-# scopes (email/bitcoin/gcal/telegram/discord) come from their respective plugin
-# manifests in Phase 3. The 4 memory-domain scopes (memory/goal/knowledge/people)
-# still come from CORE_SCOPE_DECLARATIONS in /api/init until Phase 4 moves them
-# into the memory plugin's manifest.
+# registered dynamically by plugins via register_plugin_scope() at plugin-scan
+# time. Memory/goal/knowledge/people come from the memory plugin's manifest
+# (Phase 4). email/bitcoin/gcal/telegram/discord come from their respective
+# plugin manifests (Phase 3).
 #
 # `rag` is not a user-settable dropdown — it's set programmatically per-chat via
 # `scope_rag.set(f'__rag__:{chat_name}')` in chat.py. `private` is a boolean
@@ -32,34 +31,12 @@ scope_rag:       ContextVar       = ContextVar('scope_rag',       default=None)
 scope_private:   ContextVar[bool] = ContextVar('scope_private',   default=False)
 
 # Scope registry — single source of truth for all scope operations.
-# Memory/goal/knowledge/people start here (added dynamically in _seed_core_scopes below).
-# Plugin scopes get added by plugin_loader at plugin-scan time.
+# Only rag + private at module load; everything else added by plugin_loader.
 # 'setting' is the key in chat_settings dict (None = not user-settable via sidebar).
 SCOPE_REGISTRY = {
     'rag':       {'var': scope_rag,       'default': None,      'setting': None},
     'private':   {'var': scope_private,   'default': False,     'setting': 'private_chat'},
 }
-
-
-def _seed_core_scopes():
-    """Seed the 4 core memory-domain scopes (memory/goal/knowledge/people) at
-    module load. Plugin loader will register the 5 plugin scopes later. Phase 4
-    will move these 4 into the memory plugin's manifest and delete this function.
-    """
-    _core = [
-        ('memory',    'default'),
-        ('goal',      'default'),
-        ('knowledge', 'default'),
-        ('people',    'default'),
-    ]
-    for key, default in _core:
-        if key in SCOPE_REGISTRY:
-            continue
-        var = ContextVar(f'scope_{key}', default=default)
-        SCOPE_REGISTRY[key] = {'var': var, 'default': default, 'setting': f'{key}_scope'}
-
-
-_seed_core_scopes()
 
 
 def __getattr__(name):
@@ -307,7 +284,22 @@ class FunctionManager:
             plugin_name: Plugin name for tracking
             plugin_dir: Path to plugin root directory
             tool_paths: List of relative paths to tool files (e.g., ["tools/ha.py"])
+
+        Phase 4 sys.modules idempotency: for each plugin tool file, we compute a
+        canonical module name (e.g., ``plugins.memory.tools.memory_tools``). If
+        that name is already in ``sys.modules``, we REUSE the existing module —
+        this happens when something imports the module via normal Python import
+        before plugin_loader runs (e.g., ``from plugins.memory.tools import
+        memory_tools as mem`` in another file). Reusing prevents the "two module
+        instances with split state" hazard that would otherwise split ``_db_lock``,
+        ``_db_initialized``, ``_backfill_done``, and any other module-level state.
+
+        If the module is NOT in sys.modules, we exec the file into a fresh
+        namespace as before AND install it in sys.modules under the canonical
+        name so subsequent regular-Python imports find the SAME module object.
         """
+        import sys
+        import types
         plugin_dir = Path(plugin_dir)
 
         for tool_rel_path in tool_paths:
@@ -323,10 +315,30 @@ class FunctionManager:
 
             module_name = f"plugin_{plugin_name}_{tool_path.stem}"
 
+            # Canonical name matching Python's namespace package import path.
+            # For plugin_dir="plugins/memory" and tool_rel_path="tools/memory_tools.py"
+            # → canonical_name = "plugins.memory.tools.memory_tools"
+            rel_path_obj = Path(tool_rel_path)
+            parts = [plugin_dir.name] + list(rel_path_obj.with_suffix('').parts)
+            canonical_name = "plugins." + ".".join(parts)
+
             try:
-                source = tool_path.read_text(encoding="utf-8")
-                namespace = {"__file__": str(tool_path), "__name__": module_name}
-                exec(compile(source, str(tool_path), "exec"), namespace)
+                # sys.modules idempotency check — reuse if already imported
+                existing_mod = sys.modules.get(canonical_name)
+                if existing_mod is not None and hasattr(existing_mod, '__dict__'):
+                    logger.debug(f"Plugin '{plugin_name}' tool '{canonical_name}' already in sys.modules — reusing")
+                    namespace = existing_mod.__dict__
+                else:
+                    source = tool_path.read_text(encoding="utf-8")
+                    namespace = {"__file__": str(tool_path), "__name__": canonical_name}
+                    exec(compile(source, str(tool_path), "exec"), namespace)
+                    # Install the exec'd namespace as a real module in sys.modules
+                    # so future `from plugins.memory.tools import memory_tools` calls
+                    # resolve to the SAME module object (no split state).
+                    mod_stub = types.ModuleType(canonical_name)
+                    mod_stub.__dict__.update(namespace)
+                    mod_stub.__file__ = str(tool_path)
+                    sys.modules[canonical_name] = mod_stub
 
                 if not namespace.get('ENABLED', True):
                     logger.info(f"Plugin tool '{module_name}' is disabled")
@@ -401,7 +413,16 @@ class FunctionManager:
                 logger.error(f"Failed to load plugin tool '{tool_path}': {e}", exc_info=True)
 
     def unregister_plugin_tools(self, plugin_name: str):
-        """Remove all tools belonging to a plugin."""
+        """Remove all tools belonging to a plugin.
+
+        Phase 4: also purges the canonical module names from sys.modules so a
+        subsequent reload_plugin() can freshly re-exec the source file. Without
+        this purge, the sys.modules idempotency fix in register_plugin_tools
+        would reuse the stale module on reload and the edits would never take
+        effect. Since unregister is always called as part of a reload cycle,
+        it's safe (and necessary) to drop sys.modules entries here.
+        """
+        import sys
         with self._tools_lock:
             to_remove = [name for name, info in self.function_modules.items()
                          if info.get('_plugin') == plugin_name]
@@ -424,6 +445,17 @@ class FunctionManager:
                 self._enabled_tools = [t for t in self._enabled_tools
                                        if t['function']['name'] not in func_names]
                 self._mode_filters.pop(module_name, None)
+
+            # Purge sys.modules entries for this plugin's canonical module names
+            # so the next register_plugin_tools() call freshly re-execs the source.
+            # Canonical names are of the form "plugins.<plugin_name>.tools.<stem>"
+            # (or deeper paths depending on tool_rel_path). Match by prefix.
+            prefix = f"plugins.{plugin_name}."
+            stale = [k for k in list(sys.modules.keys()) if k.startswith(prefix)]
+            for k in stale:
+                sys.modules.pop(k, None)
+            if stale:
+                logger.debug(f"Plugin '{plugin_name}' sys.modules purged: {stale}")
 
         if to_remove:
             logger.info(f"Plugin '{plugin_name}' tools unregistered: {to_remove}")
