@@ -447,7 +447,12 @@ class ContinuityScheduler:
             
             return matched
         except Exception as e:
-            logger.error(f"[Continuity] Cron check failed for '{cron_expr}': {e}")
+            # "failed to find next date" is expected for daemon/webhook tasks that use
+            # impossible schedules like "0 0 31 2 *" (Feb 31) to prevent cron firing.
+            if 'next date' in str(e).lower() or 'next due' in str(e).lower():
+                logger.debug(f"[Continuity] Cron '{cron_expr}' has no next date (expected for daemon/webhook tasks)")
+            else:
+                logger.error(f"[Continuity] Cron check failed for '{cron_expr}': {e}")
             return False
     
     def _make_progress_callback(self, task_id: str):
