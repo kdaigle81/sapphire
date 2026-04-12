@@ -1,4 +1,4 @@
-# functions/knowledge.py
+# plugins/memory/tools/knowledge_tools.py
 """
 Knowledge base system for reference data: people contacts and knowledge tabs.
 SQLite-backed with FTS5 search, semantic embeddings, and scope isolation.

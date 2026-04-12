@@ -1,4 +1,4 @@
-# functions/memory.py
+# plugins/memory/tools/memory_tools.py
 # Long-term memory with FTS5 full-text search, semantic embeddings, and labels
 
 import sqlite3

@@ -12,7 +12,7 @@ main.py (runner with restart loop)
     ├── LLMChat (core/chat/)
     │   ├── llm_providers → Claude, OpenAI, Gemini (core) + custom + plugin-provided
     │   ├── plugin_loader → plugins/*, user/plugins/*
-    │   ├── function_manager → functions/*, scopes, story tools
+    │   ├── function_manager → plugin tools, functions/*, scopes, story tools
     │   └── session_manager → chat history (SQLite)
     ├── Continuity (core/continuity/)
     │   ├── scheduler → cron-based task runner
@@ -80,7 +80,7 @@ user/
 ├── story_presets/           # Custom story presets
 ├── webui/
 │   └── plugins/            # Plugin settings (HA, email, etc.)
-├── functions/              # Your custom tools
+├── functions/              # Legacy custom tools (most moved to plugins/memory/)
 ├── plugins/                # Your private plugins
 ├── history/
 │   └── sapphire_history.db # Chat sessions (SQLite WAL)
@@ -411,8 +411,9 @@ Each session has message history, per-chat settings (prompt, voice, toolset, LLM
 | `core/story_engine/engine.py` | Story state, presets, custom tools |
 | `core/continuity/scheduler.py` | Cron-based task scheduler |
 | `core/audio/device_manager.py` | Audio device handling |
-| `functions/knowledge.py` | Knowledge base + people |
-| `functions/memory.py` | Long-term memory + embeddings |
+| `plugins/memory/tools/knowledge_tools.py` | Knowledge base + people |
+| `plugins/memory/tools/memory_tools.py` | Long-term memory + embeddings |
+| `plugins/memory/tools/goals_tools.py` | Goals + progress journaling |
 
 ---
 

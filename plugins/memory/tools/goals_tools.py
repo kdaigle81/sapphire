@@ -1,4 +1,4 @@
-# functions/goals.py
+# plugins/memory/tools/goals_tools.py
 """
 Goal tracking system for AI self-directed planning.
 SQLite-backed with subtasks, progress journaling, and memory scope integration.

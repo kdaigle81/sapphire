@@ -32,6 +32,7 @@ The `capabilities` object declares what the plugin provides:
     "hooks": { ... },
     "voice_commands": [ ... ],
     "tools": [ ... ],
+    "scopes": [ ... ],
     "routes": [ ... ],
     "schedule": [ ... ],
     "settings": [ ... ],
@@ -48,6 +49,7 @@ The `capabilities` object declares what the plugin provides:
 Each capability is documented in its own guide:
 - [Hooks & Voice Commands](hooks.md)
 - [Tools](tools.md)
+- Scopes — see below
 - [Routes](routes.md)
 - [Schedule](schedule.md)
 - [Settings & Web UI](settings.md)
@@ -56,6 +58,56 @@ Each capability is documented in its own guide:
 - [Themes](THEMES.md)
 - [Daemons](daemons.md) — long-running background threads with event sources (e.g. Telegram, Discord listeners)
 - Sidebar Accordion — inject custom HTML panels into the chat sidebar
+
+### Scopes
+
+Scopes let a plugin register data-isolation selectors that appear in the Chat Settings sidebar. Each scope creates a `ContextVar` that your tools can read to know which data partition the current chat is using.
+
+**When to use:** If your plugin stores per-user data (memories, contacts, wallet addresses, accounts) and users might want different data sets for different chats (e.g., "work" vs "personal" email accounts).
+
+**Declare scopes in your manifest:**
+
+```json
+{
+  "capabilities": {
+    "scopes": [
+      {
+        "key": "email",
+        "label": "email",
+        "endpoint": "/api/email/accounts",
+        "data_key": "accounts",
+        "value_field": "address",
+        "name_field": "address",
+        "label_template": "{address}"
+      }
+    ]
+  }
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `key` | Yes | Scope identifier — must be a valid Python identifier. Creates `scope_{key}` ContextVar and `{key}_scope` setting key |
+| `label` | Yes | Display label in the Chat Settings sidebar dropdown header |
+| `endpoint` | Yes | API endpoint that returns the list of available scope values (for the dropdown) |
+| `data_key` | No | Key in the endpoint response JSON that contains the list (default: root array) |
+| `value_field` | No | Field in each list item to use as the scope value |
+| `name_field` | No | Field in each list item to use as the display name |
+| `label_template` | No | Format string for dropdown labels (e.g., `"{name} ({count})"`) |
+| `nav_target` | No | View to navigate to when the "+" button is clicked (e.g., `"mind:memories"`) |
+| `default` | No | Default scope value (default: `"default"`) |
+
+**Reading the scope in your tool code:**
+
+```python
+def _get_current_email_scope():
+    from core.chat.function_manager import scope_email
+    return scope_email.get()  # returns the value set in Chat Settings
+```
+
+The import resolves via `function_manager.__getattr__` — no need to import the ContextVar directly. The scope is automatically set by the chat pipeline before your tool's `execute()` is called.
+
+**Real example:** See `plugins/memory/plugin.json` for 4 scopes (memory, goal, knowledge, people) and `plugins/email/plugin.json` for the email scope.
 
 ## Priority Bands
 

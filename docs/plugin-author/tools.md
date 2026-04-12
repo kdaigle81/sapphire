@@ -1,6 +1,6 @@
 # Plugin Tools
 
-Plugin tools use the same format as `functions/*.py` — they're registered with the function manager and the AI calls them like any built-in tool.
+Plugin tools are registered with the function manager and the AI calls them like any built-in tool. The format is the same across all plugins (see `plugins/memory/tools/` for examples of core tools, or `plugins/email/tools/` for a plugin tool).
 
 For simple tool creation without a full plugin, see [TOOLMAKER.md](../TOOLMAKER.md).
 

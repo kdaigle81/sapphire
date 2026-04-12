@@ -128,14 +128,14 @@ Sapphire ships with 15 tool modules containing 65+ functions:
 
 ### Where Tools Live
 
-Tools are provided by **plugins**. Core tools live in `functions/`, plugin tools in `plugins/*/tools/`, and AI-created tools in `user/plugins/*/tools/`.
+Tools are provided by **plugins**. Memory/knowledge/goals/people tools live in `plugins/memory/tools/`, other plugin tools in `plugins/*/tools/`, and AI-created tools in `user/plugins/*/tools/`. A small number of standalone tools remain in `functions/` (web, meta, ai).
 
 | Path | Purpose | Git Tracked |
 |------|---------|-------------|
-| `functions/` | Core tools | Yes |
-| `plugins/*/tools/` | Plugin tools (HA, SSH, email, bitcoin, toolmaker) | Yes |
+| `plugins/memory/tools/` | Memory, knowledge, goals, people tools | Yes |
+| `plugins/*/tools/` | Plugin tools (HA, SSH, email, bitcoin, toolmaker, agents) | Yes |
+| `functions/` | Standalone tools (web search, meta, ai) | Yes |
 | `user/plugins/*/tools/` | AI-created tool plugins | No |
-| `user/functions/` | Legacy custom tools (deprecated) | No |
 
 ### Enable/Disable
 
@@ -180,9 +180,9 @@ For full plugin development (tools + hooks + voice commands + schedules + web UI
 Tools are functions the AI calls to interact with systems — web search, memory, device control.
 
 TOOL MODULES (15 total, 65+ functions):
-- memory.py: save_memory, search_memory, get_recent_memories, delete_memory
-- knowledge.py: save_person, save_knowledge, search_knowledge, delete_knowledge
-- goals.py: create_goal, list_goals, update_goal, delete_goal
+- memory_tools.py (plugins/memory): save_memory, search_memory, get_recent_memories, delete_memory
+- knowledge_tools.py (plugins/memory): save_person, save_knowledge, search_knowledge, delete_knowledge
+- goals_tools.py (plugins/memory): create_goal, list_goals, update_goal, delete_goal
 - web.py: web_search, get_website, get_wikipedia, research_topic, get_site_links, get_images
 - ai.py: ask_claude
 - meta.py: view_prompt, switch_prompt, edit_prompt, set_piece, remove_piece, create_piece, list_pieces, reset_chat, change_username, set_tts_voice, list_tools, get_time
