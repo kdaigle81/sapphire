@@ -894,12 +894,26 @@ async def update_plugin_settings(plugin_name: str, request: Request, _=Depends(r
 
     USER_PLUGIN_SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
     settings_file = USER_PLUGIN_SETTINGS_DIR / f"{plugin_name}.json"
+
+    # Shallow-merge over existing so side-channel keys (e.g. MCP's `servers`)
+    # and partial patches (e.g. email's single-field updates) don't clobber
+    # unrelated state. Full resets go through DELETE.
+    existing = {}
+    if settings_file.exists():
+        try:
+            existing = json.loads(settings_file.read_text(encoding='utf-8'))
+            if not isinstance(existing, dict):
+                existing = {}
+        except Exception:
+            existing = {}
+    merged = {**existing, **settings}
+
     tmp_path = settings_file.with_suffix('.tmp')
     with open(tmp_path, 'w', encoding='utf-8') as f:
-        json.dump(settings, f, indent=2)
+        json.dump(merged, f, indent=2)
     tmp_path.replace(settings_file)
 
-    return {"status": "success", "plugin": plugin_name, "settings": settings}
+    return {"status": "success", "plugin": plugin_name, "settings": merged}
 
 
 @router.delete("/api/webui/plugins/{plugin_name}/settings")
