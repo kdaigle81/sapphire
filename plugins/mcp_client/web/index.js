@@ -30,8 +30,6 @@ registerPluginSettings({
     },
 
     load: () => pluginsAPI.getSettings(PLUGIN_NAME),
-    save: (s) => pluginsAPI.saveSettings(PLUGIN_NAME, s),
-    getSettings: () => ({}),
 });
 
 async function _loadServers(container) {

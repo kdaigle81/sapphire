@@ -9,7 +9,7 @@
     "routes/servers.py": "sha256:950094b011735846650d1c1dcbf0529e5e622d494f7b5b3ea1a776c173208d52",
     "test_server.py": "sha256:863e29be2b5d210aeab3ef9e7b6293420a4f75145cdba77a8ee195511ae345d0",
     "tools/mcp_tools.py": "sha256:0a8c911304aa260f9ba3a98bb20cdc8385a9a477ddbc67fb7281085a88cae1cd",
-    "web/index.js": "sha256:a761515a7f83fb71c755763f76ba6047380284d101a5fe9e02447b0fabb30e09"
+    "web/index.js": "sha256:26a2bf30d0f46f50053c9a7eebca41aa628bb5b3c2e9064061a87571bb0e9289"
   },
-  "signature": "A1Toceq6pmuLJDU4JW421YmXaA+/O5Bf/kaFvUAHj+eGb3Rz24QAiTmvmRKCkdhJpJshwsGZM44rgDjMruEeCA=="
+  "signature": "WRmNTbiKzzJ9/cK7pwwrwwpU9HDPNoWlW4OBc3ZMUomFMHSvoNd87FAFXgPdQ/LIz9DEVyo1gCz1iiiRZhRBBA=="
 }
