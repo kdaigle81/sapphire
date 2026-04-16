@@ -203,14 +203,45 @@ class ExecutionContext:
                      f"history={len(history_messages) if history_messages else 0} msgs")
         final_content = None
 
+        overflow_reason = None
         for i in range(max_iterations):
-            # Context limit check
+            # Context limit check — auto-trim oldest messages rather than bail.
+            # Previously this break fired before we ever called the LLM whenever
+            # loaded history was already >90% of the task's context_limit,
+            # producing a silent "(No response — tool loop exhausted)" placeholder.
+            # Now we aggressively trim the oldest non-system messages, clean up
+            # orphaned tool-result heads, retry under 80% of limit, and only
+            # give up with a specific reason if trim can't help.
             if context_limit > 0:
                 from core.chat.history import count_tokens
                 total_tokens = sum(count_tokens(str(m.get("content", ""))) for m in messages)
                 if total_tokens > context_limit * 0.9:
-                    logger.warning(f"[ExecCtx] Context limit approaching ({total_tokens}/{context_limit})")
-                    break
+                    sys_idx = 1 if messages and messages[0].get("role") == "system" else 0
+                    non_system = len(messages) - sys_idx
+                    if non_system > 4:
+                        drop = max(1, non_system // 4)
+                        del messages[sys_idx:sys_idx + drop]
+                        # Strip any orphaned tool-result messages now at the front
+                        while len(messages) > sys_idx and messages[sys_idx].get("role") == "tool":
+                            messages.pop(sys_idx)
+                        # Also strip an assistant that had tool_calls whose results
+                        # just got dropped (would become orphan at LLM call time)
+                        if len(messages) > sys_idx and messages[sys_idx].get("role") == "assistant" and messages[sys_idx].get("tool_calls"):
+                            messages.pop(sys_idx)
+                        new_total = sum(count_tokens(str(m.get("content", ""))) for m in messages)
+                        logger.warning(
+                            f"[ExecCtx] Context trim: dropped ~{drop} oldest msgs "
+                            f"({total_tokens} → {new_total} tokens, limit {context_limit})"
+                        )
+                        total_tokens = new_total
+                    if total_tokens > context_limit * 0.9:
+                        # Trim couldn't rescue this turn — give a specific reason
+                        overflow_reason = (
+                            f"(Context overflow — {total_tokens}/{context_limit} tokens even after "
+                            f"trim. Clear older chat history or raise this task's context_limit.)"
+                        )
+                        logger.error(f"[ExecCtx] {overflow_reason}")
+                        break
 
             response_msg = self.tool_engine.call_llm_with_metrics(
                 self.provider, messages, self.gen_params, tools=self.tools
@@ -259,9 +290,13 @@ class ExecutionContext:
             if last.get("role") == "assistant" and last.get("content"):
                 final_content = last["content"]
             else:
-                # Loop exhausted via tool calls or empty response — synthesize a final message
-                # so the conversation isn't left with an orphaned user turn
-                final_content = "(No response — tool loop exhausted or LLM returned empty)"
+                # Synthesize a final message so the conversation isn't left with
+                # an orphaned user turn. Use the specific overflow reason if we
+                # broke on context, generic fallback otherwise.
+                if overflow_reason:
+                    final_content = overflow_reason
+                else:
+                    final_content = "(No response — tool loop exhausted or LLM returned empty)"
                 messages.append({"role": "assistant", "content": final_content})
 
         # Expose messages generated during this run. Only include if we got a response —
