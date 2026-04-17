@@ -471,6 +471,15 @@ def _apply_chat_settings(system, settings: dict):
         from core.chat.function_manager import apply_scopes_from_settings, reset_scopes
         reset_scopes()
         apply_scopes_from_settings(system.llm_chat.function_manager, settings)
+        # Align RAG scope with the active chat — chat.py/chat_streaming.py set this
+        # per-request, but routes that only activate a chat (no message sent) left
+        # scope_rag pointing at the previous chat's documents.
+        try:
+            chat_name = system.llm_chat.session_manager.get_active_chat_name()
+            if chat_name:
+                system.llm_chat.function_manager.set_rag_scope(f"__rag__:{chat_name}")
+        except Exception:
+            pass
     except Exception as e:
         logger.error(f"Error applying scope settings: {e}")
 

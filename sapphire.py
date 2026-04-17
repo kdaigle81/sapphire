@@ -113,6 +113,33 @@ class VoiceChatSystem:
             logger.critical(f"Plugin loader failed — ALL plugins unavailable: {e}", exc_info=True)
             self._plugin_load_error = str(e)
 
+        # Essential-plugin boot assertion — any plugin with manifest.essential=true
+        # MUST be loaded or we scream loud. Silent boot without memory/core tools is
+        # worse than refusing to work. (Doesn't raise — degraded-mode is still better
+        # than dead — but surfaces the failure to the UI and logs.)
+        self._missing_essential_plugins = []
+        try:
+            from core.plugin_loader import plugin_loader as _pl
+            for _name, _info in _pl._plugins.items():
+                if _info.get("manifest", {}).get("essential") and not _info.get("loaded"):
+                    self._missing_essential_plugins.append(_name)
+                    reason = _info.get("verify_msg") or ("disabled" if not _info.get("enabled") else "load failed")
+                    logger.critical(
+                        f"ESSENTIAL PLUGIN NOT LOADED: '{_name}' — reason: {reason}. "
+                        f"Sapphire is running in degraded mode. Fix: re-sign the plugin "
+                        f"(python tools/sign_plugin.py plugins/{_name}) or set ALLOW_UNSIGNED_PLUGINS=true."
+                    )
+                    print(f"\n{'='*60}\nSAPPHIRE WARNING: Essential plugin '{_name}' did not load ({reason})\nRunning in degraded mode — memory/core tools unavailable.\n{'='*60}\n", flush=True)
+            if self._missing_essential_plugins:
+                try:
+                    from core.event_bus import publish, Events
+                    publish(Events.SYSTEM_WARNING if hasattr(Events, 'SYSTEM_WARNING') else 'system_warning',
+                            {"type": "missing_essential_plugins", "plugins": self._missing_essential_plugins})
+                except Exception:
+                    pass
+        except Exception as _e:
+            logger.warning(f"Essential-plugin check failed: {_e}")
+
         # Re-apply toolset now that plugin tools are registered
         # (toolset was applied before plugins loaded, so plugin tools were missed)
         fm = self.llm_chat.function_manager

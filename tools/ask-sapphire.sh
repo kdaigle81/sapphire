@@ -5,7 +5,8 @@
 set -euo pipefail
 
 BASE="https://localhost:8073"
-PASSWORD="${SAPPHIRE_PASSWORD:-changeme}"
+: "${SAPPHIRE_PASSWORD:?must be set — export SAPPHIRE_PASSWORD before calling}"
+PASSWORD="$SAPPHIRE_PASSWORD"
 MESSAGE="$1"
 CHAT="${2:-trinity}"
 COOKIE_JAR="/tmp/sapphire-claude-cookies.txt"

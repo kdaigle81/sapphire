@@ -75,7 +75,12 @@ def _create_code_worker():
             # Sanitize project_name — prevents path traversal via LLM-supplied arg
             self.project_name = _safe_dir_name(project_name) if project_name else _slugify(mission)
             self._session_id = session_id
+            self._proc = None  # populated by _run_claude; cancel() kills it
             self.tool_log = ['claude-code']
+
+        def cancel(self):
+            super().cancel()
+            _kill_proc(self._proc)
 
         def run(self):
             settings = _get_settings()
@@ -109,10 +114,10 @@ def _create_code_worker():
                 return
 
             args = _build_claude_args(self.mission, settings, session_id=self._session_id)
-            if _HAS_NAME_FLAG:
+            if _claude_supports_name():
                 args.extend(['--name', self.project_name])
 
-            data, err = _run_claude(args, workspace)
+            data, err = _run_claude(args, workspace, worker=self)
             if err:
                 self.error = err
                 self.status = 'failed' if not self._cancelled.is_set() else 'cancelled'
@@ -120,9 +125,10 @@ def _create_code_worker():
 
             session_id = data.get('session_id', '')
 
-            # Track session
+            # Track session — only advertise as resumable if save actually succeeded
+            session_saved = False
             if session_id:
-                _save_session(session_id, self.project_name, workspace, self.mission)
+                session_saved = _save_session(session_id, self.project_name, workspace, self.mission)
 
             result_text = data.get('result', str(data))
             file_listing = _list_workspace_files(workspace)
@@ -132,14 +138,16 @@ def _create_code_worker():
                 f"- Project: `{self.project_name}`",
                 f"- Workspace: `{workspace}`",
             ]
-            if session_id:
+            if session_saved:
                 lines.append(f"- Session ID: `{session_id}` (resumable)")
+            elif session_id:
+                lines.append(f"- Session ID: `{session_id}` (not saved — resume may fail)")
             if os.path.isfile(os.path.join(workspace, 'index.html')):
                 lines.append(f"- **[Open App](/workspace/{self.project_name}/index.html)**")
             lines.append(f"\n**Files:**\n{file_listing}")
             lines.append(f"\n**Result:**\n{result_text}")
 
-            if session_id:
+            if session_saved:
                 lines.append(f"\n**If there are bugs:** Use `spawn_agent(agent_type='claude_code', "
                              f"project_name='{self.project_name}', session_id='{session_id}')` to resume. "
                              f"Describe the error so Claude Code can fix it. "
@@ -167,6 +175,7 @@ def _create_plugin_worker():
             super().__init__(agent_id, name, mission, chat_name, on_complete)
             # Sanitize plugin_name — prevents path traversal via LLM-supplied arg
             self.plugin_name = _safe_dir_name(plugin_name) if plugin_name else _slugify(mission)
+            self._proc = None  # populated by _run_claude; cancel() kills it
             # Coerce capabilities — LLMs send "providers, settings" as string not list
             if isinstance(capabilities, str):
                 self._capabilities = [c.strip() for c in capabilities.split(',') if c.strip()]
@@ -175,6 +184,10 @@ def _create_plugin_worker():
             self._context = context
             self._session_id = session_id
             self.tool_log = ['claude-code-plugin']
+
+        def cancel(self):
+            super().cancel()
+            _kill_proc(self._proc)
 
         def run(self):
             settings = _get_settings()
@@ -237,32 +250,43 @@ def _create_plugin_worker():
                 return
 
             args = _build_claude_args(self.mission, settings, session_id=self._session_id)
-            if _HAS_NAME_FLAG:
+            if _claude_supports_name():
                 args.extend(['--name', f'plugin-{self.plugin_name}'])
 
-            data, err = _run_claude(args, workspace)
+            data, err = _run_claude(args, workspace, worker=self)
             if err:
                 self.error = err
                 self.status = 'failed' if not self._cancelled.is_set() else 'cancelled'
                 return
 
             session_id = data.get('session_id', '')
+            session_saved = False
             if session_id:
-                _save_session(session_id, self.plugin_name, workspace, self.mission)
+                session_saved = _save_session(session_id, self.plugin_name, workspace, self.mission)
 
             result_text = data.get('result', str(data))
             file_listing = _list_workspace_files(workspace)
 
             # Run validation chain
             validation = _validate_plugin(workspace)
+            _public_checks = {k: v for k, v in validation.items() if not k.startswith('_')}
+            _all_passed_early = all(_public_checks.values())
 
+            # Header reflects build state so downstream reports (which use
+            # `result or error`) show FAILED when validation doesn't pass,
+            # instead of a success-shaped heading with a ✗ icon elsewhere.
+            header = (f"**Plugin Builder {self.name} — Complete**"
+                      if _all_passed_early
+                      else f"**Plugin Builder {self.name} — FAILED (validation)**")
             lines = [
-                f"**Plugin Builder {self.name} — Complete**",
+                header,
                 f"- Plugin: `{self.plugin_name}`",
                 f"- Workspace: `{workspace}`",
             ]
-            if session_id:
+            if session_saved:
                 lines.append(f"- Session ID: `{session_id}` (resumable)")
+            elif session_id:
+                lines.append(f"- Session ID: `{session_id}` (not saved — resume may fail)")
             lines.append(f"\n**Validation:**")
             for check, passed in validation.items():
                 icon = '\u2713' if passed else '\u2717'
@@ -340,13 +364,20 @@ def _validate_plugin(workspace):
     if isinstance(tools, str):
         tools = [tools]
         manifest['capabilities']['tools'] = tools
+        # Atomic write (tmp + rename) so the plugin file watcher can't read
+        # a half-written manifest during the rewrite
         try:
-            with open(manifest_path, 'w', encoding='utf-8') as f:
+            tmp_path = manifest_path + '.tmp'
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(manifest, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, manifest_path)
             logger.info(f"[claude-code] Auto-fixed manifest: tools string → list")
             results['manifest_auto_fixed'] = True
         except Exception:
-            pass
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
     # 2. Declared files exist
     all_files_ok = True
@@ -467,15 +498,23 @@ import subprocess
 
 _SAPPHIRE_ROOT = str(Path(__file__).resolve().parent.parent.parent.parent)
 
+_HAS_NAME_FLAG_CACHE = None
+_HAS_NAME_FLAG_CACHE_TIME = 0
+
 def _claude_supports_name():
-    """Check if installed claude CLI supports --name (added ~2.1.76)."""
+    """Check if installed claude CLI supports --name (added ~2.1.76).
+    Cached for 60s — repeat checks cheap, CLI upgrades mid-session still picked up."""
+    global _HAS_NAME_FLAG_CACHE, _HAS_NAME_FLAG_CACHE_TIME
+    now = time.time()
+    if _HAS_NAME_FLAG_CACHE is not None and (now - _HAS_NAME_FLAG_CACHE_TIME) < 60:
+        return _HAS_NAME_FLAG_CACHE
     try:
         out = subprocess.run(['claude', '--help'], capture_output=True, text=True, timeout=5)
-        return '--name' in out.stdout
+        _HAS_NAME_FLAG_CACHE = '--name' in out.stdout
     except Exception:
-        return False
-
-_HAS_NAME_FLAG = _claude_supports_name()
+        _HAS_NAME_FLAG_CACHE = False
+    _HAS_NAME_FLAG_CACHE_TIME = now
+    return _HAS_NAME_FLAG_CACHE
 
 _DEFAULT_CODER_INSTRUCTIONS = """You are a code builder. Write clean, working code.
 - Test your work by running it before reporting done
@@ -728,7 +767,27 @@ def _build_claude_args(mission, settings, session_id=None, model_override=None):
 _IS_WINDOWS = sys.platform == 'win32'
 
 
-def _run_claude(args, workspace, timeout_minutes=30):
+def _kill_proc(proc):
+    """Best-effort kill of a running claude subprocess (and its process group on POSIX)."""
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        if not _IS_WINDOWS:
+            import signal
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        proc.terminate()
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    except Exception:
+        pass
+
+
+def _run_claude(args, workspace, timeout_minutes=30, worker=None):
     env = _clean_env()
     timeout_sec = timeout_minutes * 60
     logger.info(f"[claude-code] Running: {' '.join(args[:6])}... in {workspace}")
@@ -741,6 +800,10 @@ def _run_claude(args, workspace, timeout_minutes=30):
         if not _IS_WINDOWS:
             popen_kwargs['start_new_session'] = True
         proc = subprocess.Popen(args, **popen_kwargs)
+        # Expose proc to worker so cancel()/shutdown can kill it instead of
+        # orphaning the claude subprocess when Sapphire is asked to stop.
+        if worker is not None:
+            worker._proc = proc
         try:
             stdout, stderr = proc.communicate(timeout=timeout_sec)
         except subprocess.TimeoutExpired:
@@ -838,11 +901,13 @@ def _get_sessions():
 
 
 def _save_session(session_id, project_name, workspace, mission):
-    """Save or update a session in plugin state."""
+    """Save or update a session in plugin state. Returns True on success, False on failure
+    (so callers don't falsely advertise the session as 'resumable')."""
     try:
         sessions, state = _get_sessions()
         if not state:
-            return
+            logger.warning(f"[claude-code] No plugin state available — session {session_id} not persisted")
+            return False
         existing = sessions.get(session_id)
         if existing:
             existing['last_used'] = time.strftime('%Y-%m-%dT%H:%M:%S')
@@ -861,8 +926,10 @@ def _save_session(session_id, project_name, workspace, mission):
             for old_id in sorted_ids[:-20]:
                 del sessions[old_id]
         state.save('sessions', sessions)
+        return True
     except Exception as e:
         logger.warning(f"[claude-code] Could not save session: {e}")
+        return False
 
 
 def _resolve_session_workspace(session_id, settings):
@@ -936,7 +1003,7 @@ def _code_session(arguments):
     _write_claude_md(workspace, base, mode, project_name)
 
     args = _build_claude_args(mission, settings, session_id=session_id)
-    if _HAS_NAME_FLAG:
+    if _claude_supports_name():
         args.extend(['--name', project_name])
 
     data, err = _run_claude(args, workspace)
@@ -946,8 +1013,9 @@ def _code_session(arguments):
     new_session_id = data.get('session_id', '')
     result_text = data.get('result', str(data))
 
+    new_session_saved = False
     if new_session_id:
-        _save_session(new_session_id, project_name, workspace, mission)
+        new_session_saved = _save_session(new_session_id, project_name, workspace, mission)
 
     mode = settings.get('mode', 'standard')
     file_listing = _list_workspace_files(workspace)
@@ -957,8 +1025,10 @@ def _code_session(arguments):
         f"- Workspace: `{workspace}`",
         f"- Mode: {mode}",
     ]
-    if new_session_id:
+    if new_session_saved:
         lines.append(f"- Session ID: `{new_session_id}` (resumable)")
+    elif new_session_id:
+        lines.append(f"- Session ID: `{new_session_id}` (not saved — resume may fail)")
     if os.path.isfile(os.path.join(workspace, 'index.html')):
         lines.append(f"- **[Open App](/workspace/{project_name}/index.html)**")
     lines.append(f"\n**Files in workspace:**\n{file_listing}")
