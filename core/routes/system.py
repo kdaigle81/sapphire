@@ -512,10 +512,17 @@ async def request_system_shutdown(request: Request, _=Depends(require_login)):
 
 @router.get("/api/system/update-check")
 async def check_for_update(request: Request, _=Depends(require_login)):
-    """Check GitHub for a newer Sapphire version."""
+    """Return cached update status. Fires a background GitHub check if cache is stale.
+    Non-blocking: the dashboard shouldn't wait 4s on a network round-trip.
+    Users who want a fresh check can call ?force=1 (or POST /api/system/update-check-now)."""
     from core.updater import updater
     from core.settings_manager import settings
-    status = updater.check_for_update(force=True)
+    force = request.query_params.get('force') in ('1', 'true', 'yes')
+    if force:
+        status = updater.check_for_update(force=True)
+    else:
+        updater.check_for_update_async()
+        status = updater.status()
     status['docker'] = settings.is_docker()
     status['managed'] = settings.is_managed()
     return status

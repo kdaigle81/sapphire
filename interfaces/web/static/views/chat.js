@@ -431,6 +431,10 @@ async function _loadPluginAccordions(container, init) {
     // Clear previous plugin accordions
     slot.innerHTML = '';
 
+    // Build DOM for all accordions first (synchronous, preserves order), then
+    // fire HTML/script fetches in parallel. Previously awaited each plugin's
+    // fetches sequentially which made sidebar load ~N*RTT on chat switch.
+    const pending = [];
     for (const plugin of plugins) {
         const acc = plugin.sidebar_accordion;
         const section = document.createElement('div');
@@ -450,26 +454,25 @@ async function _loadPluginAccordions(container, init) {
         section.appendChild(content);
         slot.appendChild(section);
 
-        // Load HTML content from plugin web dir
         if (acc.content) {
-            try {
-                const htmlResp = await fetch(`/plugin-web/${plugin.name}/${acc.content}`);
-                if (htmlResp.ok) content.innerHTML = await htmlResp.text();
-            } catch (e) {
-                content.innerHTML = `<div class="sb-field" style="color:var(--error)">Failed to load</div>`;
-            }
+            pending.push(
+                fetch(`/plugin-web/${plugin.name}/${acc.content}`)
+                    .then(r => r.ok ? r.text() : Promise.reject())
+                    .then(html => { content.innerHTML = html; })
+                    .catch(() => {
+                        content.innerHTML = `<div class="sb-field" style="color:var(--error)">Failed to load</div>`;
+                    })
+            );
         }
-
-        // Load + init JS module (re-inits on each sidebar reload — module is cached by browser)
         if (acc.script) {
-            try {
-                const mod = await import(`/plugin-web/${plugin.name}/${acc.script}`);
-                if (mod.init) mod.init(content, plugin.name);
-            } catch (e) {
-                console.warn(`[SIDEBAR] Failed to load accordion script for ${plugin.name}:`, e);
-            }
+            pending.push(
+                import(`/plugin-web/${plugin.name}/${acc.script}`)
+                    .then(mod => { if (mod.init) mod.init(content, plugin.name); })
+                    .catch(e => console.warn(`[SIDEBAR] Failed to load accordion script for ${plugin.name}:`, e))
+            );
         }
     }
+    await Promise.all(pending);
 }
 
 async function loadSidebar() {

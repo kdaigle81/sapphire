@@ -81,10 +81,13 @@ async function loadPluginList() {
             const d = await res.json();
             pluginList = d.plugins || [];
             lockedPlugins = d.locked || [];
-            // Auto-load settings tabs for enabled plugins that have a web UI
-            for (const p of pluginList) {
-                if (p.enabled && p.settingsUI) await loadPluginTab(p.name, p.settingsUI).catch(() => {});
-            }
+            // Auto-load settings tabs for enabled plugins that have a web UI.
+            // Parallelized — sequential awaits here were making Settings tab load ~N*RTT
+            // slow (once per enabled plugin). Promise.all gives us max(RTT) instead.
+            const tabLoads = pluginList
+                .filter(p => p.enabled && p.settingsUI)
+                .map(p => loadPluginTab(p.name, p.settingsUI).catch(() => {}));
+            await Promise.all(tabLoads);
         }
     } catch {}
 }

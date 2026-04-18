@@ -170,7 +170,7 @@ export default {
 // UPDATE CHECKER
 // =============================================================================
 
-async function checkForUpdate(el) {
+async function checkForUpdate(el, retry = 0) {
     const statusEl = el.querySelector('#dash-update-status');
     const actionsEl = el.querySelector('#dash-update-actions');
     if (!statusEl || !actionsEl) return;
@@ -179,6 +179,15 @@ async function checkForUpdate(el) {
         const res = await fetch('/api/system/update-check');
         if (!res.ok) throw new Error('Check failed');
         updateStatus = await res.json();
+
+        // First call returns cached state immediately; backend fires GitHub check
+        // in a background thread. If last_check == 0 (never checked), poll again
+        // shortly. Max 3 retries over ~6 seconds.
+        if (!updateStatus.last_check && retry < 3) {
+            statusEl.innerHTML = '<span class="text-muted">Checking...</span>';
+            setTimeout(() => checkForUpdate(el, retry + 1), 2000);
+            return;
+        }
 
         // Show branch name in System card
         const branchEl = el.querySelector('#dash-branch');

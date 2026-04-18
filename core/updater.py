@@ -65,8 +65,27 @@ class Updater:
         git_dir = REPO_DIR / '.git'
         return git_dir.exists()
 
+    def check_for_update_async(self):
+        """Fire the GitHub check in a background thread. Returns immediately.
+        Dashboard loader calls this so the UI never blocks on a 4s network round-trip.
+        The next poll sees the updated cache."""
+        if self.checking or self._thread and self._thread.is_alive():
+            return
+        now = time.time()
+        if self.last_check and (now - self.last_check) < 300:
+            return  # cache fresh, no need
+        self._thread = threading.Thread(target=self._check_sync, daemon=True, name='updater-check')
+        self._thread.start()
+
+    def _check_sync(self):
+        """Internal: the blocking implementation, run in a background thread."""
+        try:
+            self.check_for_update(force=False)
+        except Exception as e:
+            logger.warning(f"Background update check failed: {e}")
+
     def check_for_update(self, force=False):
-        """Check GitHub for a newer version. Returns dict with status."""
+        """Check GitHub for a newer version. Returns dict with status. BLOCKING."""
         if self.checking:
             return self.status()
 
