@@ -615,7 +615,13 @@ class ContinuityScheduler:
                     continue
                 self._task_running[task_id] = True
 
-            # Run on a separate thread so different tasks can run concurrently
+            # Run on a separate thread so different tasks can run concurrently.
+            # LOAD-BEARING: fresh threading.Thread per task is required for scope
+            # isolation. ExecutionContext._build_scopes() mutates ContextVars on
+            # this thread; a threadpool/reused-worker model would leak scope state
+            # from the previous task's scope_memory/scope_rag/etc. If you refactor
+            # this to a pool, you MUST wrap execution in copy_context().run() or
+            # save/reset tokens per-task. See witch hunt 2026-04-17.
             logger.info(f"[Continuity] Triggering task: {task_name}")
             thread = threading.Thread(
                 target=self._execute_task, args=(task,),
