@@ -141,7 +141,11 @@ class ProcessManager:
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            with open(self.log_file, "a") as log:
+            # Truncate on restart rather than append forever. The process gets
+            # restarted at each Sapphire boot — there's no long-lived log needed,
+            # and the append path was growing the file unboundedly (Scout 1
+            # finding 2026-04-19, measured 2.1MB already, linear per-utterance).
+            with open(self.log_file, "w") as log:
                 if IS_WINDOWS:
                     # Windows: no process groups, just start the process
                     self.process = subprocess.Popen(

@@ -272,6 +272,19 @@ class VoiceChatSystem:
             from core.wakeword.wakeword_null import NullAudioRecorder, NullWakeWordDetector
             self.wake_word_recorder = NullAudioRecorder()
             self.wake_detector = NullWakeWordDetector(None)
+            # Publish a loud warning so the UI can surface "wakeword silently
+            # fell back to null." Scout 4 finding: without this event, user
+            # thinks wakeword is up (UI toggle says on) but Sapphire is deaf.
+            try:
+                from core.event_bus import publish, Events
+                publish(Events.CONTINUITY_TASK_ERROR, {
+                    "task": "Wake Word",
+                    "error": f"Wake word initialization failed ({type(e).__name__}: {e}). "
+                             f"Sapphire booted without wake word detection — "
+                             f"check model file and reinitialize via settings.",
+                })
+            except Exception:
+                pass
         
         self.whisper_recorder = WhisperRecorder()
         self.whisper_client = NullWhisperClient()
@@ -382,9 +395,19 @@ class VoiceChatSystem:
         if base_dir is None:
             base_dir = Path(__file__).parent.resolve()
 
-        # Stop any in-flight playback before swapping
+        # Stop any in-flight playback AND wait for the generation thread to
+        # exit before reassigning. Without the wait, the old TTSClient becomes
+        # orphaned with its background thread still alive (held by the provider
+        # HTTP request) and can publish stale TTS_STOPPED events AFTER the new
+        # TTS client has already started, confusing frontend state.
+        # Scout 4 finding (2026-04-19).
         if hasattr(self, 'tts') and hasattr(self.tts, 'stop'):
             self.tts.stop()
+            if hasattr(self.tts, 'wait'):
+                try:
+                    self.tts.wait(timeout=2)
+                except Exception as e:
+                    logger.warning(f"TTS wait during provider swap timed out: {e}")
 
         if not provider_name or provider_name == 'none':
             self._stop_kokoro_server()

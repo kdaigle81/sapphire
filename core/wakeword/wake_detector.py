@@ -11,6 +11,49 @@ from core.event_bus import publish, Events
 logger = logging.getLogger(__name__)
 
 
+# Whisper frequently hallucinates these canned phrases on silence/noise/
+# off-language input (trained heavily on YouTube captions). Filtering them
+# prevents phantom LLM calls after wakeword false-positives. Case-
+# insensitive exact-match after strip + punctuation normalization.
+_WHISPER_HALLUCINATIONS = {
+    'thank you',
+    'thanks for watching',
+    'thanks for watching!',
+    'thanks for watching.',
+    'you',
+    '.',
+    'bye',
+    'bye.',
+    'bye!',
+    'goodbye',
+    'goodbye.',
+    "i'm sorry",
+    "i'm sorry.",
+    'subtitles by',
+    '[music]',
+    '[laughter]',
+    '[applause]',
+    'thanks.',
+    'thank you.',
+    'okay.',
+    'ok.',
+}
+
+
+def _is_whisper_hallucination(text: str) -> bool:
+    """Return True if `text` matches a known Whisper hallucination phrase
+    (or is empty/whitespace — same downstream treatment)."""
+    if not text:
+        return True
+    normalized = text.strip().lower()
+    if not normalized:
+        return True
+    if normalized in _WHISPER_HALLUCINATIONS:
+        return True
+    stripped = normalized.rstrip('.!?').strip()
+    return stripped in _WHISPER_HALLUCINATIONS
+
+
 class WakeWordDetector:
     def __init__(self, model_name=None):
         """Initialize OpenWakeWord detector.
@@ -274,6 +317,16 @@ class WakeWordDetector:
 
             if not text or not text.strip():
                 logger.warning("No speech detected")
+                self.system.speak_error('speech')
+                return
+
+            # Whisper hallucination filter. On silence or noise after a
+            # wakeword false-positive, Whisper famously produces canned
+            # phrases (trained on YouTube captions). Without this filter,
+            # the user wakes to Sapphire replying to phantom input at 3am.
+            # Scout 4 finding (2026-04-19).
+            if _is_whisper_hallucination(text):
+                logger.warning(f"Whisper hallucination filtered: {text!r}")
                 self.system.speak_error('speech')
                 return
 

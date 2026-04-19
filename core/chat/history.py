@@ -1167,13 +1167,39 @@ class ChatSessionManager:
             {"role": "assistant", "content": assistant_content},
         ])
 
-    def append_messages_to_chat(self, chat_name: str, new_messages: list):
+    def append_messages_to_chat(self, chat_name: str, new_messages: list,
+                                 max_wait_if_streaming: float = 15.0):
         """Append a list of messages to a named chat WITHOUT switching active chat.
 
         Preserves the full conversation structure including tool_calls and tool
         results. Each message gets a timestamp if it doesn't already have one.
+
+        If the target chat is the ACTIVE chat and a stream is in progress, wait
+        for the stream to finish before appending. Scout 2 finding (2026-04-19):
+        writing while the stream is mid-flight can interleave cron messages
+        between a tool_call and its tool_result (breaks LLM conversation
+        validity) OR result in a subsequent per-message save overwriting the
+        cron write with a stale in-memory snapshot. The `_is_streaming` guard
+        already protects `delete_chat` and `set_active_chat` — extending it
+        here closes the asymmetry.
         """
+        import time as _time
         self._ensure_db()
+
+        # Defer if the target is the active chat and a stream is running.
+        # Poll rather than event-wait so this works whether the caller is in
+        # an async context or a worker thread.
+        if chat_name == self.active_chat_name and self._is_streaming:
+            deadline = _time.time() + max_wait_if_streaming
+            while self._is_streaming and _time.time() < deadline:
+                _time.sleep(0.2)
+            if self._is_streaming:
+                logger.warning(
+                    f"append_messages_to_chat('{chat_name}') waited "
+                    f"{max_wait_if_streaming:.0f}s for active stream to end — "
+                    f"proceeding anyway; ordering race possible"
+                )
+
         timestamp = datetime.now().isoformat()
         try:
             with self._lock, self._get_connection() as conn:
@@ -1213,6 +1239,7 @@ class ChatSessionManager:
         result = self.current_chat.remove_last_messages(count)
         if result:
             self._save_current_chat()
+            self._prune_orphaned_tool_images(self.active_chat_name)
             publish(Events.MESSAGE_REMOVED, {"count": count})
         return result
 
@@ -1220,6 +1247,7 @@ class ChatSessionManager:
         result = self.current_chat.remove_from_user_message(user_content)
         if result:
             self._save_current_chat()
+            self._prune_orphaned_tool_images(self.active_chat_name)
             publish(Events.MESSAGE_REMOVED, {"from": "user_message"})
         return result
 
@@ -1227,6 +1255,7 @@ class ChatSessionManager:
         result = self.current_chat.remove_from_assistant_timestamp(timestamp)
         if result:
             self._save_current_chat()
+            self._prune_orphaned_tool_images(self.active_chat_name)
             publish(Events.MESSAGE_REMOVED, {"from": "assistant_timestamp"})
         return result
 
@@ -1235,9 +1264,47 @@ class ChatSessionManager:
         result = self.current_chat.remove_tool_call(tool_call_id)
         if result:
             self._save_current_chat()
-            # Note: tool call removal doesn't change turn count, no state rollback needed
+            self._prune_orphaned_tool_images(self.active_chat_name)
             publish(Events.MESSAGE_REMOVED, {"tool_call_id": tool_call_id})
         return result
+
+    def _prune_orphaned_tool_images(self, chat_name: str) -> int:
+        """Delete tool_images rows for this chat whose IDs are no longer
+        referenced by any message content. Called after any message-removal
+        path. Without this, image blobs accumulate forever (Scout 1 finding
+        2026-04-19: DB bloat at 100KB–2MB per image × heavy-use chats).
+        Returns count of rows deleted.
+        """
+        import re
+        try:
+            with self._lock, self._get_connection() as conn:
+                row = conn.execute(
+                    "SELECT messages FROM chats WHERE name = ?", (chat_name,)
+                ).fetchone()
+                if not row:
+                    return 0
+                msgs_blob = row["messages"] or "[]"
+                # Extract all live IMG IDs from message content
+                live_ids = set(re.findall(r'<<IMG::tool:([^>]+)>>', msgs_blob))
+                # Find stored image IDs for this chat that aren't in live_ids
+                stored = conn.execute(
+                    "SELECT id FROM tool_images WHERE chat_name = ?", (chat_name,)
+                ).fetchall()
+                orphans = [r["id"] for r in stored if r["id"] not in live_ids]
+                if orphans:
+                    placeholders = ','.join('?' * len(orphans))
+                    conn.execute(
+                        f"DELETE FROM tool_images WHERE chat_name = ? AND id IN ({placeholders})",
+                        (chat_name, *orphans),
+                    )
+                    conn.commit()
+                    logger.debug(
+                        f"Pruned {len(orphans)} orphan tool_image(s) from chat '{chat_name}'"
+                    )
+                return len(orphans)
+        except Exception as e:
+            logger.warning(f"orphan tool_image prune failed for '{chat_name}': {e}")
+            return 0
 
     def clear(self):
         self.current_chat.clear()
