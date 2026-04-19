@@ -29,13 +29,53 @@ export default {
             delete window._mindTab;
         }
         if (window._mindScope) {
+            // Explicit programmatic override (e.g. clicked a memory link from chat)
             currentScope = window._mindScope;
             delete window._mindScope;
+        } else {
+            // Sync to the active chat's scope for the current tab. Without this,
+            // Mind view always shows 'default' while the AI writes into whatever
+            // scope the active chat's settings have (memory_scope/goal_scope/etc).
+            // Two rooms, same house — root of the "Sapphire made a goal but I
+            // don't see it" class of bug.
+            const chatScope = await _scopeForActiveChatTab(activeTab);
+            if (chatScope) currentScope = chatScope;
         }
         await render();
     },
     hide() {}
 };
+
+
+// ─── Active-chat scope resolution ────────────────────────────────────────────
+
+const _TAB_TO_SCOPE_KEY = {
+    memories: 'memory_scope',
+    people: 'people_scope',
+    knowledge: 'knowledge_scope',
+    'ai-notes': 'knowledge_scope',
+    goals: 'goal_scope',
+};
+
+async function _scopeForActiveChatTab(tab) {
+    // Returns the scope name the active chat uses for `tab`'s domain, or
+    // null if it can't be determined (caller keeps currentScope as-is).
+    const settingKey = _TAB_TO_SCOPE_KEY[tab];
+    if (!settingKey) return null;
+    try {
+        const resp = await fetch('/api/status');
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        const raw = (data.chat_settings || {})[settingKey];
+        // 'none' means the scope dimension is disabled for this chat —
+        // the AI can't write there. Fall back to 'default' so the user
+        // can still see SOMETHING (global + default overlay).
+        if (!raw || raw === 'none') return 'default';
+        return raw;
+    } catch {
+        return null;
+    }
+}
 
 // ─── Main Render ─────────────────────────────────────────────────────────────
 
@@ -76,13 +116,18 @@ async function render() {
         </div>
     `;
 
-    // Tab switching
+    // Tab switching — re-sync scope to the active chat's setting for the new
+    // tab's domain. Each tab maps to a different scope axis (memories →
+    // memory_scope, goals → goal_scope, etc). Without this, switching tabs
+    // keeps the prior tab's scope and the user sees mismatched data.
     container.querySelectorAll('.mind-tab').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             container.querySelectorAll('.mind-tab').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             activeTab = btn.dataset.tab;
             memoryPage = 0;
+            const chatScope = await _scopeForActiveChatTab(activeTab);
+            if (chatScope) currentScope = chatScope;
             updateScopeDropdown();
             renderContent();
         });
