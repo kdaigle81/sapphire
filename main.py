@@ -73,13 +73,25 @@ def handle_signal(signum, frame):
 def run_sapphire():
     """Run sapphire.py and return its exit code."""
     global _child_process
-    
+
     script_path = Path(__file__).parent / "sapphire.py"
-    
+
     if not script_path.exists():
         log(f"ERROR: sapphire.py not found at {script_path}", RED)
         return 1
-    
+
+    # Apply a pending update BEFORE spawning sapphire.py. This is the only
+    # point where no Python process holds files open, so git pull can
+    # overwrite `.py` files safely on Windows. Pip sync runs here too, so
+    # new dependencies are installed before the import cascade fires.
+    # Never blocks boot: any failure is written to user/last_update_result.json
+    # and surfaced to the UI on next load, then we boot the previous version.
+    try:
+        from core.updater import apply_pending_update
+        apply_pending_update()
+    except Exception as e:
+        log(f"Pending-update apply raised: {e}", RED)
+
     try:
         _child_process = subprocess.Popen(
             [sys.executable, str(script_path)],

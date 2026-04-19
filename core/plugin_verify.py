@@ -27,6 +27,19 @@ SIGNING_PUBLIC_KEY = bytes.fromhex("b4e188e374c7ddc83544cda23f4818693441bc197068
 # File extensions to verify (must match what sign_plugin.py hashes)
 SIGNABLE_EXTENSIONS = {".py", ".json", ".js", ".css", ".html", ".md"}
 
+# Filenames that platform tooling drops into directories without the user's
+# knowledge. If one of these is a signable extension (currently none are, but
+# the check is cheap), it should NOT block plugin load — a `Thumbs.db` or
+# `Desktop.ini` appearing in a plugin dir isn't a tampering event. Covers:
+#   - Windows Explorer: Thumbs.db, desktop.ini (+ different casings)
+#   - macOS Finder: .DS_Store, ._AppleDouble
+#   - Linux trash: .directory
+_IGNORABLE_FILENAMES = {
+    "Thumbs.db", "thumbs.db",
+    "desktop.ini", "Desktop.ini",
+    ".DS_Store", ".directory",
+}
+
 # Cache for authorized keys (avoid hitting GitHub on every plugin scan)
 _authorized_keys_cache: list | None = None
 _authorized_keys_fetched_at: float = 0
@@ -170,6 +183,8 @@ def _verify_file_integrity(plugin_dir: Path, sig_data: dict) -> Tuple[bool, str]
         if not f.is_file():
             continue
         if f.name == "plugin.sig":
+            continue
+        if f.name in _IGNORABLE_FILENAMES:
             continue
         if f.suffix not in SIGNABLE_EXTENSIONS:
             continue

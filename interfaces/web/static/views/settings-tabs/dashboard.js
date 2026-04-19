@@ -85,24 +85,27 @@ export default {
         // Force update
         el.querySelector('#dash-force-update')?.addEventListener('click', async () => {
             const btn = el.querySelector('#dash-force-update');
-            if (!confirm('Pull latest code from git? Sapphire will restart after.')) return;
+            if (!confirm('Schedule an update? Sapphire will pre-flight the git state, take a backup, then restart to pull and install dependencies.')) return;
             btn.disabled = true;
-            btn.textContent = 'Updating...';
+            btn.textContent = 'Scheduling...';
             try {
                 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
                 const res = await fetch('/api/system/update', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${res.status}`);
+                }
                 const data = await res.json();
-                if (data.status === 'updated') {
-                    ui.showToast('Updated! Restarting...', 'success');
+                if (data.status === 'scheduled') {
+                    ui.showToast(data.message || 'Update scheduled. Restarting...', 'success');
                     setTimeout(() => pollForRestart(), 2000);
                 } else {
-                    ui.showToast(data.message || 'Already up to date', 'success');
+                    ui.showToast(data.message || 'No update needed', 'success');
                     btn.disabled = false;
                     btn.textContent = 'Force Update (git pull)';
                 }
             } catch (e) {
-                ui.showToast(`Update failed: ${e.message}`, 'error');
+                ui.showToast(`Update refused: ${e.message}`, 'error');
                 btn.disabled = false;
                 btn.textContent = 'Force Update (git pull)';
             }
@@ -162,8 +165,29 @@ export default {
         checkForUpdate(el);
         loadMetrics(el);
         loadMissingDeps(el, ctx);
+        // If the last boot applied a deferred update, toast the result once.
+        checkLastUpdateResult();
     }
 };
+
+// If a deferred update ran at last boot, surface its result to the user.
+// Clears the result on read so we only toast once per update cycle.
+async function checkLastUpdateResult() {
+    try {
+        const res = await fetch('/api/system/last-update-result');
+        if (!res.ok) return;
+        const data = await res.json();
+        const r = data.result;
+        if (!r) return;
+        if (r.success) {
+            ui.showToast(r.message || 'Update applied', 'success');
+        } else {
+            // Failure toasts stay up longer via type=error; the detailed
+            // message from git/pip is already actionable for the user.
+            ui.showToast(`Update did NOT apply: ${r.message}`, 'error');
+        }
+    } catch {}
+}
 
 
 // =============================================================================
@@ -207,6 +231,11 @@ async function checkForUpdate(el, retry = 0) {
                 actionsEl.innerHTML = `<p class="text-muted" style="font-size:var(--font-xs);margin:0">Upstream update — get it from <a href="https://github.com/ddxfish/sapphire/releases" target="_blank">Sapphire releases</a></p>`;
             } else if (updateStatus.docker || updateStatus.managed) {
                 actionsEl.innerHTML = `<p class="text-muted" style="font-size:var(--font-xs);margin:0">Update via: <code>docker compose pull && docker compose up -d</code></p>`;
+            } else if (updateStatus.blocked_branch) {
+                // Dev-ish branch — auto-update is disabled to avoid pulling WIP commits.
+                actionsEl.innerHTML = `<p class="text-muted" style="font-size:var(--font-xs);margin:0">On <code>${updateStatus.branch}</code> branch — update manually with <code>git pull</code>.</p>`;
+            } else if (!updateStatus.git_available) {
+                actionsEl.innerHTML = `<p class="text-muted" style="font-size:var(--font-xs);margin:0">Git is not installed or not on PATH. Install git and restart Sapphire to enable auto-update.</p>`;
             } else if (updateStatus.has_git) {
                 actionsEl.innerHTML = `<button class="btn-primary btn-sm" id="dash-do-update">Update Now</button>`;
                 actionsEl.querySelector('#dash-do-update')?.addEventListener('click', () => doUpdate(el));
@@ -234,37 +263,46 @@ async function doUpdate(el) {
     if (!actionsEl) return;
 
     const btn = actionsEl.querySelector('#dash-do-update');
-    if (btn) { btn.disabled = true; btn.textContent = 'Updating...'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Scheduling...'; }
 
     try {
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
         const res = await fetch('/api/system/update', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
         if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || 'Update failed');
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Update refused');
         }
-        ui.showToast('Updated! Restarting...', 'success');
+        const data = await res.json();
+        ui.showToast(data.message || 'Update scheduled. Restarting...', 'success');
 
         const statusEl = el.querySelector('#dash-update-status');
-        if (statusEl) statusEl.innerHTML = '<span class="text-muted">Restarting with new version...</span>';
+        // The deferred flow: pull + pip install run between the old process
+        // exit and the new one booting. Set expectations so the user doesn't
+        // worry during the longer restart window.
+        if (statusEl) statusEl.innerHTML = '<span class="text-muted">Applying update (pull + dependencies)…</span>';
         actionsEl.innerHTML = '';
 
         setTimeout(() => pollForRestart(), 2000);
     } catch (e) {
-        ui.showToast(e.message, 'error');
+        ui.showToast(`Update refused: ${e.message}`, 'error');
         if (btn) { btn.disabled = false; btn.textContent = 'Update Now'; }
     }
 }
 
 function pollForRestart() {
+    // Deferred update means the restart runs: old process exit → main.py
+    // sleeps 1s → git pull (up to 180s) → pip install (up to 300s) → spawn
+    // → FastAPI boot (~5-10s). Worst case ~8 minutes. Poll for 5 minutes
+    // which covers the common case cleanly; user can manually refresh after.
     let attempts = 0;
+    const maxAttempts = 300;  // 300 * 1s = 5 minutes
     const poll = async () => {
         attempts++;
         try {
             const res = await fetch('/api/health');
             if (res.ok) { window.location.reload(); return; }
         } catch {}
-        if (attempts < 30) setTimeout(poll, 1000);
+        if (attempts < maxAttempts) setTimeout(poll, 1000);
     };
     poll();
 }
