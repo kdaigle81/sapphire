@@ -4,7 +4,9 @@
 
 import json
 import logging
+import os
 import secrets
+import threading
 import time
 import urllib.parse
 from pathlib import Path
@@ -19,6 +21,13 @@ GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 SCOPES = 'https://www.googleapis.com/auth/calendar'
 CALLBACK_PATH = '/api/plugin/google-calendar/callback'
 
+# Serialize the CSRF load-mutate-save cycle. Two concurrent "Connect" clicks
+# (second tab, or user + AI tool simultaneously) would otherwise clobber each
+# other's CSRF token → one callback arrives with a token that's no longer
+# valid → user loses their refresh-token (Google only issues it with
+# prompt=consent access_type=offline, once). Day-ruiner scout finding.
+_csrf_lock = threading.Lock()
+
 # Temporary CSRF state stored in plugin_state (not credentials — it's ephemeral)
 def _get_csrf_path():
     state_dir = Path(__file__).parent.parent.parent.parent / 'user' / 'plugin_state'
@@ -28,12 +37,27 @@ def _get_csrf_path():
 def _load_csrf():
     path = _get_csrf_path()
     if path.exists():
-        return json.loads(path.read_text(encoding='utf-8'))
+        try:
+            return json.loads(path.read_text(encoding='utf-8'))
+        except json.JSONDecodeError:
+            # Corrupt file (mid-write crash from pre-atomic-write era) — start
+            # fresh. Log so the incident is visible.
+            logger.warning(f"gcal CSRF file corrupt at {path}; starting empty")
     return {}
 
 def _save_csrf(data):
+    """Atomic write to prevent a mid-write crash (or concurrent second writer)
+    from leaving half-written JSON on disk. Same tmp+rename pattern PluginState
+    uses."""
     path = _get_csrf_path()
-    path.write_text(json.dumps(data), encoding='utf-8')
+    tmp = path.with_suffix(f'.json.tmp.{os.getpid()}')
+    try:
+        tmp.write_text(json.dumps(data), encoding='utf-8')
+        tmp.replace(path)
+    finally:
+        if tmp.exists():
+            try: tmp.unlink()
+            except Exception: pass
 
 
 def _get_redirect_uri(request):
@@ -61,11 +85,14 @@ def start_auth(request=None, query=None, settings=None, **_):
 
     # Generate CSRF state token that encodes the scope
     state_token = secrets.token_urlsafe(32)
-    csrf = _load_csrf()
-    csrf[state_token] = {'scope': scope, 'created': time.time()}
-    # Clean up old CSRF tokens (>10 min)
-    csrf = {k: v for k, v in csrf.items() if time.time() - v.get('created', 0) < 600}
-    _save_csrf(csrf)
+    # Lock protects the load-mutate-save cycle from concurrent OAuth starts
+    # (e.g. user clicks Connect twice, or two scopes connect simultaneously).
+    with _csrf_lock:
+        csrf = _load_csrf()
+        csrf[state_token] = {'scope': scope, 'created': time.time()}
+        # Clean up old CSRF tokens (>10 min)
+        csrf = {k: v for k, v in csrf.items() if time.time() - v.get('created', 0) < 600}
+        _save_csrf(csrf)
 
     params = {
         'client_id': client_id,
@@ -96,9 +123,12 @@ def handle_callback(request=None, query=None, settings=None, **_):
         return {"error": "No authorization code received"}
 
     # Verify CSRF state and extract scope
-    csrf = _load_csrf()
-    csrf_entry = csrf.pop(state_token, None)
-    _save_csrf(csrf)
+    # Lock protects callback-time RMW against a concurrent auth-start writing
+    # a new token into the same file.
+    with _csrf_lock:
+        csrf = _load_csrf()
+        csrf_entry = csrf.pop(state_token, None)
+        _save_csrf(csrf)
 
     if not csrf_entry:
         return {"error": "State mismatch — possible CSRF attack"}

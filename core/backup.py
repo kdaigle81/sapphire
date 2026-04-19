@@ -8,6 +8,24 @@ import config
 logger = logging.getLogger(__name__)
 
 
+# File-pattern exclusions for the tar filter. Skip:
+#  - quarantined corrupted state files (may contain stale OAuth tokens,
+#    session strings, etc. — leaking them in a shared backup is a privacy
+#    violation). Pattern: `*.bad-<timestamp>` from PluginState._load.
+#  - in-flight tmp files from atomic-rename writes. They may be truncated
+#    JSON and pollute the backup with partial state.
+_BACKUP_EXCLUDE_SUFFIXES = ('.tmp',)
+def _backup_filter(tarinfo):
+    name = tarinfo.name
+    # `.bad-<timestamp>` suffix from corrupted-state quarantine
+    if '.bad-' in name:
+        return None
+    # .tmp rename files + .tmp.<pid>.<id> from PluginState._save
+    if name.endswith('.tmp') or '.tmp.' in name:
+        return None
+    return tarinfo
+
+
 class Backup:
     """Backup manager for the user/ directory."""
 
@@ -57,7 +75,7 @@ class Backup:
             # Checkpoint SQLite WAL files before backup to ensure consistent snapshots
             self._checkpoint_databases()
             with tarfile.open(filepath, "w:gz") as tar:
-                tar.add(self.user_dir, arcname="user")
+                tar.add(self.user_dir, arcname="user", filter=_backup_filter)
 
             size_mb = filepath.stat().st_size / (1024 * 1024)
             logger.info(f"Created backup: {filename} ({size_mb:.2f} MB)")

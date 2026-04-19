@@ -195,8 +195,10 @@ async def add_goal_progress(goal_id: int, request: Request, _=Depends(require_lo
 @router.delete("/api/goals/{goal_id}")
 async def delete_goal_endpoint(goal_id: int, request: Request, _=Depends(require_login)):
     from plugins.memory.tools import goals_tools as goals
+    # force=true lets the UI confirm + override the permanent-goal guard
+    force = request.query_params.get('force', '').lower() in ('1', 'true', 'yes')
     try:
-        title = goals.delete_goal_api(goal_id)
+        title = goals.delete_goal_api(goal_id, force=force)
         return {"deleted": goal_id, "title": title}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

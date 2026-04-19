@@ -299,6 +299,16 @@ def delete_scope(name: str) -> dict:
             cursor = conn.cursor()
             cursor.execute('SELECT COUNT(*) FROM goals WHERE scope = ? AND parent_id IS NULL', (name,))
             goal_count = cursor.fetchone()[0]
+            # Null out parent_id on goals in OTHER scopes that reference a
+            # deleted goal in THIS scope. Otherwise the DELETE below hits an
+            # FK violation (parent_id REFERENCES goals(id) with no ON DELETE
+            # clause) and the whole scope-delete transaction rolls back with
+            # an opaque 500. Day-ruiner scout finding 2026-04-18.
+            cursor.execute(
+                'UPDATE goals SET parent_id = NULL '
+                'WHERE parent_id IN (SELECT id FROM goals WHERE scope = ?)',
+                (name,)
+            )
             # Delete progress for all goals in scope
             cursor.execute('DELETE FROM goal_progress WHERE goal_id IN (SELECT id FROM goals WHERE scope = ?)', (name,))
             cursor.execute('DELETE FROM goals WHERE scope = ?', (name,))
@@ -491,15 +501,24 @@ def add_progress_note(goal_id, note):
         return note_id
 
 
-def delete_goal_api(goal_id, cascade=True):
-    """Delete a goal. Returns the deleted title. Raises ValueError if not found."""
+def delete_goal_api(goal_id, cascade=True, force=False):
+    """Delete a goal. Returns the deleted title. Raises ValueError if not found.
+
+    Permanent goals require force=True — guards against an accidental trash-
+    icon click wiping a standing duty. The AI-facing _delete_goal blocks
+    permanent unconditionally; the UI path gives an informed override.
+    """
     with _get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT title FROM goals WHERE id = ?', (goal_id,))
+        cursor.execute('SELECT title, permanent FROM goals WHERE id = ?', (goal_id,))
         row = cursor.fetchone()
         if not row:
             raise ValueError(f"Goal [{goal_id}] not found")
-        title = row[0]
+        title, is_permanent = row[0], bool(row[1])
+        if is_permanent and not force:
+            raise ValueError(
+                f"Goal [{goal_id}] is permanent — pass force=true to delete"
+            )
 
         if not cascade:
             cursor.execute('UPDATE goals SET parent_id = NULL WHERE parent_id = ?', (goal_id,))

@@ -650,6 +650,12 @@ async def load_persona(name: str, request: Request, _=Depends(require_login), sy
     for key in scope_setting_keys():
         if key not in settings:
             settings[key] = "default"
+    # scope_setting_keys() excludes 'private_chat' (it's a bool scope, not
+    # in the dropdown-facing list). Reset it here so loading a persona that
+    # doesn't explicitly set private_chat turns it OFF — otherwise a chat
+    # that was marked private stays private silently after persona switch.
+    if "private_chat" not in settings:
+        settings["private_chat"] = False
     session_manager = system.llm_chat.session_manager
     session_manager.update_chat_settings(settings)
 
