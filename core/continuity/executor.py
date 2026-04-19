@@ -206,7 +206,14 @@ class ContinuityExecutor:
     def _extract_task_settings(task: Dict[str, Any]) -> Dict[str, Any]:
         """Extract execution settings from a task dict for ExecutionContext.
         Scope keys are pulled dynamically from SCOPE_REGISTRY so new plugin scopes
-        propagate to scheduled tasks without code changes."""
+        propagate to scheduled tasks without code changes.
+
+        Missing scope keys fall back to 'default' for backward compat with
+        tasks created before the scope-registry rollout. But: we warn when
+        that happens so the silent-default class of bugs is visible in logs.
+        A task that SHOULD have been scoped to e.g. 'lookout' but is missing
+        the key will still run, but the warning flags the write as going to
+        shared memory unintentionally. Scout finding 2026-04-19."""
         from core.chat.function_manager import scope_setting_keys
         settings = {
             "prompt": task.get("prompt", "default"),
@@ -218,8 +225,19 @@ class ContinuityExecutor:
             "max_parallel_tools": task.get("max_parallel_tools"),
             "context_limit": task.get("context_limit"),
         }
+        missing_scopes = []
         for setting_key in scope_setting_keys():
-            settings[setting_key] = task.get(setting_key, "default")
+            if setting_key in task:
+                settings[setting_key] = task[setting_key]
+            else:
+                settings[setting_key] = "default"
+                missing_scopes.append(setting_key)
+        if missing_scopes:
+            logger.warning(
+                f"[Continuity] Task '{task.get('name', '?')}' missing scope keys "
+                f"{missing_scopes} — defaulting to 'default' scope. Writes from "
+                f"this task land in shared memory. Edit the task to set explicit scopes."
+            )
         return settings
 
     def _run_background(self, task: Dict[str, Any], result: Dict[str, Any],

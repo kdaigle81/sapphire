@@ -28,23 +28,41 @@ curl -sk -b "$COOKIE_JAR" -c "$COOKIE_JAR" -X POST "$BASE/login" \
     -d "password=$PASSWORD&csrf_token=$CSRF" -o /dev/null
 
 # Fetch the target chat's configured settings so the continuity task inherits
-# the chat's persona + scopes + toolset instead of forcing 'sapphire' / 'default'.
-# Without this, messaging a chat configured for a different persona (e.g.
-# 'rook' in the lookout chat) would route the response through the Sapphire
-# prompt regardless — the bug user reported 2026-04-19.
-CHAT_SETTINGS_RAW=$(curl -sk -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF" \
-    "$BASE/api/chats/$CHAT/settings" 2>/dev/null || echo '{}')
+# the chat's persona + scopes + toolset. We REFUSE to run if settings can't
+# be fetched — silent fallback to 'sapphire'/'default' means the user thinks
+# they're talking to one persona in one scope but lands somewhere else. A
+# chat whose settings can't be read is an error state to surface, not mask.
+CHAT_SETTINGS_TMP=$(mktemp)
+HTTP_STATUS=$(curl -sk -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF" \
+    -w "%{http_code}" -o "$CHAT_SETTINGS_TMP" \
+    "$BASE/api/chats/$CHAT/settings" 2>/dev/null || echo "000")
+CHAT_SETTINGS_RAW=$(cat "$CHAT_SETTINGS_TMP")
+rm -f "$CHAT_SETTINGS_TMP"
 
-# Build the task body in Python so message escaping + settings merge are
-# handled together cleanly. Values come in via env vars so nothing has to
-# be shell-quoted a second time.
+if [ "$HTTP_STATUS" != "200" ]; then
+    echo "ERROR: Cannot fetch settings for chat '$CHAT' (HTTP $HTTP_STATUS)." >&2
+    echo "       Response: $CHAT_SETTINGS_RAW" >&2
+    echo "       Refusing to send — silent fallback to 'sapphire'/'default'" >&2
+    echo "       would route this to the wrong persona and scope." >&2
+    echo "       Fix: create the chat in the Web UI first, or pick an existing one." >&2
+    exit 2
+fi
+
+# Build the task body in Python. The chat's settings are authoritative —
+# we only fall back to 'all' for toolset (UI convention, not a scope/persona
+# hard-default).
 TASK_BODY=$(CHAT_RAW="$CHAT_SETTINGS_RAW" CHAT_NAME="$CHAT" MSG="$FULL_MESSAGE" python3 <<'PY'
-import json, os
+import json, os, sys
 try:
     raw = json.loads(os.environ.get('CHAT_RAW') or '{}')
-except json.JSONDecodeError:
-    raw = {}
+except json.JSONDecodeError as e:
+    print(f"ERROR: chat settings response is not valid JSON: {e}", file=sys.stderr)
+    sys.exit(3)
 s = raw.get('settings', {}) if isinstance(raw, dict) else {}
+if not s:
+    print("ERROR: chat settings response has no 'settings' key. Response:",
+          json.dumps(raw)[:200], file=sys.stderr)
+    sys.exit(3)
 body = {
     "name": "claude-code-msg",
     "type": "task",
@@ -62,7 +80,7 @@ body = {
 }
 print(json.dumps(body))
 PY
-)
+) || exit 3
 
 # Create one-shot task
 TASK_RESULT=$(curl -sk -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF" \

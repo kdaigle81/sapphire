@@ -896,25 +896,22 @@ async def get_active_chat(request: Request, _=Depends(require_login), system=Dep
 
 @router.get("/api/chats/{chat_name}/settings")
 async def get_chat_settings(chat_name: str, request: Request, _=Depends(require_login), system=Depends(get_system)):
-    """Get settings for a specific chat."""
+    """Get settings for a specific chat.
+
+    Reads from SQLite (same storage used by every other chat operation).
+    Legacy pre-SQLite code path checked a JSON file that no longer exists
+    post-migration, causing every non-active chat to 404 here — which in
+    turn made `tools/ask-sapphire.sh` and any other external caller
+    silently fall back to default scopes + sapphire persona. Root cause of
+    the silent-default class we found on 2026-04-19."""
     try:
         session_manager = system.llm_chat.session_manager
         if chat_name == session_manager.active_chat_name:
             return {"settings": session_manager.get_chat_settings()}
 
-        chat_path = session_manager._get_chat_path(chat_name)
-        if not chat_path.exists():
+        settings = session_manager.read_chat_settings(chat_name)
+        if settings is None:
             raise HTTPException(status_code=404, detail=f"Chat '{chat_name}' not found")
-
-        with open(chat_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        if isinstance(data, dict) and "settings" in data:
-            settings = data["settings"]
-        else:
-            from core.chat.history import get_system_defaults
-            settings = get_system_defaults()
-
         return {"settings": settings}
     except HTTPException:
         raise

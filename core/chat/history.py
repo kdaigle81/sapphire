@@ -1140,6 +1140,32 @@ class ChatSessionManager:
     def get_turn_count(self) -> int:
         return self.current_chat.get_turn_count()
 
+    def read_chat_settings(self, chat_name: str) -> Optional[Dict[str, Any]]:
+        """Read a chat's settings from SQLite WITHOUT switching active chat.
+        Returns None if the chat doesn't exist. Applies system defaults
+        on top of the stored settings so callers get a complete view.
+
+        This replaces a legacy JSON-file path that no longer exists post
+        SQLite migration — the old route code was silently 404'ing every
+        non-active chat because the JSON file it expected was never
+        written. Silent-default class bug (2026-04-19)."""
+        self._ensure_db()
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT settings FROM chats WHERE name = ?", (chat_name,)
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                stored = json.loads(row["settings"]) if row["settings"] else {}
+                merged = get_system_defaults()
+                merged.update(stored)
+                return merged
+        except Exception as e:
+            logger.error(f"Failed to read settings for chat '{chat_name}': {e}")
+            return None
+
     def read_chat_messages(self, chat_name: str, provider: str = None) -> List[Dict[str, Any]]:
         """Read messages from a named chat WITHOUT switching active chat."""
         self._ensure_db()
