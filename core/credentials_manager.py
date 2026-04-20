@@ -934,7 +934,16 @@ class CredentialsManager:
                 return False
 
     def update_gcal_tokens(self, scope: str, refresh_token: str, access_token: str = '', expires_at: float = 0) -> bool:
-        """Update OAuth tokens for an existing gcal account (called after OAuth callback)."""
+        """Update OAuth tokens for an existing gcal account (called after OAuth callback).
+
+        Truthy-guard on refresh_token: if caller passes empty string, the
+        existing refresh_token is PRESERVED — this is deliberate for the
+        routine refresh path (new access_token, same refresh_token). To
+        actually clear (disconnect), use `clear_gcal_tokens(scope)` instead
+        — passing empty strings here does NOT clear. Scout finding (GCal #3
+        follow-up) — the disconnect path was accidentally preserving the
+        refresh_token because of this exact guard.
+        """
         with self._lock:
             accounts = self._credentials.get('gcal_accounts', {})
             if scope not in accounts:
@@ -942,6 +951,21 @@ class CredentialsManager:
             accounts[scope]['refresh_token'] = self._scramble(refresh_token) if refresh_token else accounts[scope].get('refresh_token', '')
             accounts[scope]['access_token'] = access_token  # Short-lived, no need to encrypt
             accounts[scope]['expires_at'] = expires_at
+            return self._save()
+
+    def clear_gcal_tokens(self, scope: str) -> bool:
+        """Unconditionally clear all OAuth tokens for a scope — disconnect path.
+        Keeps the account config (client_id, client_secret, calendar_id) so the
+        user can re-authorize without re-entering credentials, but the refresh
+        token is really gone. See update_gcal_tokens docstring for why this
+        dedicated method exists."""
+        with self._lock:
+            accounts = self._credentials.get('gcal_accounts', {})
+            if scope not in accounts:
+                return False
+            accounts[scope]['refresh_token'] = ''
+            accounts[scope]['access_token'] = ''
+            accounts[scope]['expires_at'] = 0
             return self._save()
 
     def get_gcal_tokens_snapshot(self, scope: str) -> dict:

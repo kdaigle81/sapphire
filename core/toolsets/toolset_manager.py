@@ -56,6 +56,25 @@ class ToolsetManager:
             except Exception as e:
                 logger.error(f"Failed to load user toolsets: {e}")
                 self._toolsets = {}
+            # Targeted migration: ensure 'default' exists. The agent persona
+            # (core/personas/personas.json) and the agents plugin default_toolset
+            # setting both reference `toolset='default'`. On installs that seeded
+            # their user file before 'default' was a shipped toolset, spawned
+            # agents resolve to 0 tools and silently run with no capability.
+            # Scout #8 — 2026-04-20. If the user deliberately deleted 'default'
+            # after this migration, they can remove it again; we only seed once
+            # per load pass when genuinely missing.
+            if 'default' not in self._toolsets:
+                try:
+                    with open(core_path, 'r', encoding='utf-8') as f:
+                        core_data = json.load(f)
+                    core_default = core_data.get('default')
+                    if core_default:
+                        self._toolsets['default'] = core_default
+                        self._save_to_user()
+                        logger.info("Seeded missing 'default' toolset from core defaults (scout #8 migration)")
+                except Exception as e:
+                    logger.warning(f"'default' toolset migration failed: {e}")
             logger.info(f"Loaded {len(self._toolsets)} toolsets")
             return
 

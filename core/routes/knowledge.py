@@ -47,9 +47,16 @@ async def embedding_integrity(request: Request, _=Depends(require_login)):
     Used by the Settings UI to warn before a provider swap: shows how many
     memory/knowledge/people vectors would become invisible to vector search
     if the user proceeded. Powers the 'Swap anyway?' confirmation dialog.
+
+    Runs in a worker thread — the report issues 6 `SELECT ... GROUP BY`
+    queries over BLOB-bearing tables with no index on (provider, dim). On
+    100k+ rows that's a multi-second synchronous scan, long enough to stall
+    the FastAPI event loop and queue every other HTTP request behind it.
+    Scout finding #14 — 2026-04-20.
     """
+    import asyncio
     from core.embeddings import integrity_report
-    return integrity_report()
+    return await asyncio.to_thread(integrity_report)
 
 
 @router.post("/api/embedding/reembed")

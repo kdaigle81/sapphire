@@ -192,7 +192,9 @@ def disconnect(query=None, body=None, settings=None, **_):
 
     acct = credentials.get_gcal_account(scope)
     if acct.get('client_id'):
-        # Keep the account config, just clear the tokens
-        credentials.update_gcal_tokens(scope, '', '', 0)
+        # Keep the account config, actually clear the tokens. `update_gcal_tokens`
+        # with empty strings deliberately preserves the refresh_token (routine
+        # refresh semantics) — use `clear_gcal_tokens` for disconnect.
+        credentials.clear_gcal_tokens(scope)
         return {"status": "disconnected"}
     return {"status": "no_account"}

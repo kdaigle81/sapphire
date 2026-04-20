@@ -419,9 +419,20 @@ def _canary_embed(instance):
     return True, "ok"
 
 
-# Cache canary result per plugin provider class (id-keyed so hot-reload of a
-# plugin creates a new class object and re-runs the canary).
+# Cache canary result per plugin provider class.
+#
+# Key is `(module_name, qualname)` — stable across plugin reload and safe
+# against CPython GC id-reuse. Scout finding #11 (2026-04-20): the previous
+# `id(cls)` key meant a class that got GC'd could have its id reused by a
+# new class, which would then silently inherit the prior's canary result —
+# cached "ok" → bad vectors never re-validated; cached "fail" → legit
+# provider rejected without warning. Module+qualname avoids both.
 _plugin_canary_cache = {}
+
+
+def _canary_cache_key(cls):
+    """Stable cache key for a provider class. See _plugin_canary_cache."""
+    return (getattr(cls, '__module__', ''), getattr(cls, '__qualname__', cls.__name__))
 
 
 class EmbeddingRegistry(BaseProviderRegistry):
@@ -458,15 +469,21 @@ class EmbeddingRegistry(BaseProviderRegistry):
         reference to a GC'd class object, or worse, keep working with stale
         code. Scout finding #15."""
         # Discover classes owned by this plugin before super removes them.
+        # Track BOTH id() (for the active-instance check below — type()
+        # returns the real class object) AND the stable module+qualname key
+        # used by the canary cache. Scout finding #11: can't use id() as the
+        # canary key because of GC id-reuse hazards.
         with self._lock:
-            owned_classes = {id(v.get('class')) for k, v in self._plugins.items()
-                             if v.get('plugin_name') == plugin_name}
+            owned_classes = [v.get('class') for k, v in self._plugins.items()
+                             if v.get('plugin_name') == plugin_name and v.get('class')]
+        owned_class_ids = {id(c) for c in owned_classes}
+        owned_canary_keys = {_canary_cache_key(c) for c in owned_classes}
         # If the active singleton is an instance of an owned class, reset it.
         # FTS still works on all rows; vector search will resume once the user
         # picks another provider — far better than letting a dead class sit.
         try:
             global _embedder
-            if _embedder is not None and id(type(_embedder)) in owned_classes:
+            if _embedder is not None and id(type(_embedder)) in owned_class_ids:
                 logger.info(
                     f"[embedding] Plugin '{plugin_name}' unloading while its "
                     f"provider was active — switching to 'none'."
@@ -476,8 +493,8 @@ class EmbeddingRegistry(BaseProviderRegistry):
             logger.debug(f"unregister_plugin active-swap failed: {e}")
         # Clear canary cache for these classes so a reload validates fresh.
         try:
-            for cls_id in owned_classes:
-                _plugin_canary_cache.pop(cls_id, None)
+            for ck in owned_canary_keys:
+                _plugin_canary_cache.pop(ck, None)
         except Exception:
             pass
         return super().unregister_plugin(plugin_name)
@@ -502,10 +519,11 @@ class EmbeddingRegistry(BaseProviderRegistry):
         # produce sane vectors. Core providers are trusted (tested in-repo).
         # Result cached per class so we only pay this cost once per process.
         if is_plugin:
-            cached = _plugin_canary_cache.get(id(cls))
+            ck = _canary_cache_key(cls)
+            cached = _plugin_canary_cache.get(ck)
             if cached is None:
                 ok, msg = _canary_embed(instance)
-                _plugin_canary_cache[id(cls)] = (ok, msg)
+                _plugin_canary_cache[ck] = (ok, msg)
                 if ok:
                     logger.info(f"[embedding] Plugin '{key}' canary passed: {msg}")
                 else:

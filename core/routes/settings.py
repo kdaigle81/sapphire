@@ -182,7 +182,9 @@ async def update_settings_batch(request: Request, _=Depends(require_login)):
         if new_provider and new_provider != current_provider and not data.get('confirm_embedding_swap'):
             try:
                 from core.embeddings import integrity_report
-                report = integrity_report()
+                # to_thread — see /api/embedding/integrity for rationale
+                # (scout #14). Same 6-select blocking scan.
+                report = await asyncio.to_thread(integrity_report)
                 tables = report.get('tables', {}) or {}
                 def _count(t):
                     return (t.get('matching_active') or 0) + (t.get('legacy_unstamped') or 0)

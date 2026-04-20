@@ -1743,14 +1743,27 @@ async def plugin_route_dispatch(plugin_name: str, path: str, request: Request):
     only add an additional bearer-token auth path."""
     from core.plugin_loader import plugin_loader
     from core.auth import check_endpoint_rate
+    import hashlib
 
     # Bearer-token bypass for plugins that registered a key file. Falls
     # through to require_login if no bearer or bearer invalid.
-    if not _check_plugin_bearer(plugin_name, request):
+    bearer_ok = _check_plugin_bearer(plugin_name, request)
+    if not bearer_ok:
         await require_login(request)
 
-    # Rate limit: 30 requests per 60s per session per plugin
-    check_endpoint_rate(request, f"plugin_route:{plugin_name}", max_calls=30)
+    # Rate limit: 30 requests per 60s. For bearer-authenticated requests,
+    # identify by hash of the bearer token instead of IP — otherwise every
+    # MCP client on localhost collapses into one bucket (initialize +
+    # tools/list + first tools/call burns 3 of the 30 at session start).
+    # Scout finding #13 — 2026-04-20.
+    identity = None
+    if bearer_ok:
+        auth = request.headers.get('Authorization', '')
+        token = auth[len('Bearer '):].strip() if auth.startswith('Bearer ') else ''
+        if token:
+            identity = f"bearer:{hashlib.sha256(token.encode()).hexdigest()[:16]}"
+    check_endpoint_rate(request, f"plugin_route:{plugin_name}", max_calls=30,
+                        identity=identity)
 
     result = plugin_loader.get_route_handler(plugin_name, request.method, path)
     if not result:

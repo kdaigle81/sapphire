@@ -1,5 +1,29 @@
 {
-  "_comment": "Default starter toolsets - seeded into user file on first run",
+  "_comment": "Default starter toolsets - seeded into user file on first run. Also: 'default' is the lean background-worker baseline referenced by the agent persona and the agents plugin's default_toolset setting — missing it means agents resolve to 0 tools (scout #8). ToolsetManager ensures 'default' stays seeded even after the initial user-file seed.",
+  "default": {
+    "emoji": "\uD83E\uDDF0",
+    "functions": [
+      "web_search",
+      "get_website",
+      "get_wikipedia",
+      "research_topic",
+      "save_memory",
+      "search_memory",
+      "get_recent_memories",
+      "save_knowledge",
+      "search_knowledge",
+      "create_goal",
+      "list_goals",
+      "update_goal",
+      "notepad_read",
+      "notepad_append_lines",
+      "notepad_delete_lines",
+      "notepad_insert_line",
+      "search_help_docs",
+      "ask_claude",
+      "get_time"
+    ]
+  },
   "work": {
     "emoji": "\uD83D\uDCBC",
     "functions": [

@@ -100,9 +100,20 @@ def get_client_ip(request: Request) -> str:
 _endpoint_limits: dict = defaultdict(list)
 
 
-def check_endpoint_rate(request: Request, endpoint: str, max_calls: int, window: int = 60) -> None:
-    """Raise 429 if session exceeds max_calls within window seconds."""
-    session_id = request.session.get('csrf_token') or get_client_ip(request)
+def check_endpoint_rate(request: Request, endpoint: str, max_calls: int,
+                        window: int = 60, identity: str = None) -> None:
+    """Raise 429 if identity exceeds max_calls within window seconds.
+
+    Identity precedence (scout #13, 2026-04-20):
+      1. Explicit `identity` arg — callers that authenticated via bearer
+         token pass a hash of the token so MCP clients don't all collapse
+         into one IP-based bucket when multiple tools hammer the same
+         endpoint (MCP `initialize` + `tools/list` + first `tools/call`
+         is 3 calls at session start alone).
+      2. Session CSRF token if present (standard web flow).
+      3. Client IP as last resort.
+    """
+    session_id = identity or request.session.get('csrf_token') or get_client_ip(request)
     key = f"{session_id}:{endpoint}"
     now = time.time()
     _endpoint_limits[key] = [t for t in _endpoint_limits[key] if now - t < window]
