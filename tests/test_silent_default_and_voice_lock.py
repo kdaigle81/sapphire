@@ -172,10 +172,14 @@ def test_resolve_persona_preserves_explicit_none_for_scope_keys():
     )
 
 
-def test_resolve_persona_still_overrides_default_for_scope_keys():
-    """Legacy sentinel 'default' on scope keys continues to fall through to
-    persona. Only 'none' is the explicit opt-out carve-out — we didn't
-    change the rest of the resolver."""
+def test_resolve_persona_preserves_explicit_default_for_scope_keys():
+    """Explicit task_val='default' on a scope key is a REAL value (the user
+    deliberately selecting the default scope) — it must NOT be silently
+    overridden by the persona's scope. Previously 'default' was in the
+    sentinel list, which meant cloned tasks and templates silently inherited
+    the persona's scope instead of writing into 'default'. Scout day-ruiner
+    #4 — 2026-04-21. This test locks in that 'default' is a first-class
+    value for scope keys, not an 'override-me' placeholder."""
     from core.continuity.executor import ContinuityExecutor
     ex = ContinuityExecutor(MagicMock())
     persona_settings = {
@@ -186,9 +190,31 @@ def test_resolve_persona_still_overrides_default_for_scope_keys():
     with patch("core.personas.persona_manager") as pm:
         pm.get.return_value = persona_settings
         resolved = ex._resolve_persona(task)
-    assert resolved["memory_scope"] == "sapphire", (
-        "Sentinel 'default' on a scope key should still fall through to persona."
+    assert resolved["memory_scope"] == "default", (
+        "Explicit memory_scope='default' must be honored — it's a real scope, "
+        "not a sentinel. Got persona-override instead, which reopens silent-default."
     )
+
+
+def test_resolve_persona_raises_on_malformed_persona():
+    """Previously a bare except returned the raw task on persona resolution
+    failure, letting missing scope keys fall to registry defaults silently
+    downstream. Now the exception surfaces so the scheduler's outer try/
+    except logs and records the failure. Scout chaos #4/#9 — 2026-04-21."""
+    from core.continuity.executor import ContinuityExecutor
+    ex = ContinuityExecutor(MagicMock())
+
+    class _BrokenPersona:
+        def get(self, *_a, **_kw):
+            # Simulate a persona file corrupted mid-read, returning a string
+            # instead of a dict — .get() on that raises AttributeError inside
+            # the merge loop.
+            return "not-a-dict"
+
+    task = {"persona": "sapphire", "memory_scope": "default"}
+    with patch("core.personas.persona_manager", _BrokenPersona()):
+        with pytest.raises(Exception):
+            ex._resolve_persona(task)
 
 
 def test_resolve_persona_non_scope_field_still_treats_none_as_empty():
@@ -634,6 +660,118 @@ def test_openai_compat_low_max_tokens_does_not_stream(monkeypatch):
         "always-stream unnecessarily."
     )
     assert result is sentinel_resp
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. Silent-default regression lock-in (day-ruiner #1, chaos #4/#9, 2026-04-21)
+#
+# `_build_scopes` used to gate the force-None-unlisted-scope invariant on
+# `task_settings.get('prompt') == 'agent'`. Any non-agent persona (sapphire,
+# rook, custom, `spawn_agent(prompt='self')` inheriting non-agent) with
+# unlisted plugin scopes fell back to the registry default `'default'` —
+# which is a REAL scope where the user's memories live. Agent writes silently
+# landed in the user's bucket. These tests lock in the universal invariant:
+# any task whose settings don't list a scope key gets None (disabled), not
+# 'default'. If someone re-narrows the gate to a persona-name match, these
+# tests fail.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_build_scopes_non_agent_persona_forces_none_for_unlisted_key():
+    """Sapphire-persona task with NO memory_scope in settings must resolve
+    memory ContextVar to None (disabled), not 'default'. This is the core
+    regression assertion — the bug that let agents write into the user's
+    shared memory bucket."""
+    from core.continuity.execution_context import ExecutionContext
+    from core.chat.function_manager import scope_memory
+
+    fm = MagicMock()
+    fm._apply_mode_filter = lambda x: x
+    fm.set_rag_scope = MagicMock()
+    fm.set_private_chat = MagicMock()
+    te = MagicMock()
+
+    task_settings = {
+        "prompt": "sapphire",  # NON-agent persona
+        "toolset": "all",
+        # NOTE: deliberately no memory_scope / knowledge_scope / etc.
+    }
+
+    with patch.object(ExecutionContext, "_build_prompt", return_value="sys"), \
+         patch.object(ExecutionContext, "_resolve_provider", return_value=("k", MagicMock(), "")), \
+         patch.object(ExecutionContext, "_build_gen_params", return_value={}), \
+         patch.object(ExecutionContext, "_resolve_tools", return_value=[{"function": {"name": "x"}}]):
+        ctx = ExecutionContext(fm, te, task_settings)
+    # After construction, _build_scopes has run. memory ContextVar should be None.
+    assert scope_memory.get() is None, (
+        f"scope_memory should be None for a non-agent task with no explicit "
+        f"memory_scope — got {scope_memory.get()!r}. This is silent-default "
+        f"class regression: the gate narrowed back to agent-only or someone "
+        f"set the registry default to a real scope name."
+    )
+
+
+def test_build_scopes_honors_explicit_scope_even_for_sapphire_persona():
+    """Force-None must ONLY touch unlisted keys. A sapphire task that
+    deliberately lists memory_scope='work' keeps 'work' — we don't disable
+    scopes the user explicitly chose."""
+    from core.continuity.execution_context import ExecutionContext
+    from core.chat.function_manager import scope_memory
+
+    fm = MagicMock()
+    fm._apply_mode_filter = lambda x: x
+    fm.set_rag_scope = MagicMock()
+    fm.set_private_chat = MagicMock()
+    te = MagicMock()
+
+    task_settings = {
+        "prompt": "sapphire",
+        "toolset": "all",
+        "memory_scope": "work",  # explicit — must be honored
+    }
+
+    with patch.object(ExecutionContext, "_build_prompt", return_value="sys"), \
+         patch.object(ExecutionContext, "_resolve_provider", return_value=("k", MagicMock(), "")), \
+         patch.object(ExecutionContext, "_build_gen_params", return_value={}), \
+         patch.object(ExecutionContext, "_resolve_tools", return_value=[{"function": {"name": "x"}}]):
+        ExecutionContext(fm, te, task_settings)
+
+    assert scope_memory.get() == "work", (
+        f"Explicit memory_scope='work' should survive _build_scopes — got "
+        f"{scope_memory.get()!r}. Force-None over-reached into a listed key."
+    )
+
+
+def test_build_scopes_agent_persona_also_force_nones_unlisted():
+    """Agent persona MUST retain the force-None behavior (that was the prior
+    fix #16). This test confirms the widened invariant didn't accidentally
+    drop the agent case — agents remain correctly defanged."""
+    from core.continuity.execution_context import ExecutionContext
+    from core.chat.function_manager import scope_memory, scope_knowledge
+
+    fm = MagicMock()
+    fm._apply_mode_filter = lambda x: x
+    fm.set_rag_scope = MagicMock()
+    fm.set_private_chat = MagicMock()
+    te = MagicMock()
+
+    task_settings = {
+        "prompt": "agent",
+        "toolset": "default",
+        "memory_scope": "none",  # agent explicit opt-out
+        # knowledge_scope deliberately absent — should get None
+    }
+
+    with patch.object(ExecutionContext, "_build_prompt", return_value="sys"), \
+         patch.object(ExecutionContext, "_resolve_provider", return_value=("k", MagicMock(), "")), \
+         patch.object(ExecutionContext, "_build_gen_params", return_value={}), \
+         patch.object(ExecutionContext, "_resolve_tools", return_value=[{"function": {"name": "x"}}]):
+        ExecutionContext(fm, te, task_settings)
+
+    assert scope_memory.get() is None, "explicit 'none' should resolve to None"
+    assert scope_knowledge.get() is None, (
+        "Unlisted knowledge_scope on agent task must still be force-Noned."
+    )
 
 
 def test_canary_drift_band_logs_warning(caplog):

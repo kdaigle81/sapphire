@@ -132,21 +132,34 @@ class ExecutionContext:
 
         # Apply task-specific scopes to this thread's ContextVars
         apply_scopes_from_settings(self.fm, self.task_settings)
-        # For the 'agent' persona specifically, any scope the task DIDN'T list
-        # explicitly gets forced to None (disabled). Without this, a plugin that
-        # registers a new scope *after* the agent persona was defined (in
-        # personas.json or the inline fallback) would leave that scope at the
-        # registry default ('default'), silently granting the agent access.
-        # Scout #16 — 2026-04-20. The scope default is 'default' (a real scope
-        # name); the agent contract says "disabled unless explicitly listed."
-        if self.task_settings.get('prompt') == 'agent':
-            for name, reg in list(SCOPE_REGISTRY.items()):
-                setting_key = reg.get('setting')
-                if setting_key and setting_key not in self.task_settings:
-                    try:
-                        reg['var'].set(None)
-                    except Exception as e:
-                        logger.warning(f"[ExecCtx] Could not force-disable scope {name}: {e}")
+        # Force-None every SCOPE_REGISTRY key NOT explicitly present in the
+        # task's settings. This is the silent-default class closure.
+        #
+        # Background: `'default'` is doing double duty in this system — it's
+        # both the registry default assigned at ContextVar registration time
+        # AND a real scope name where user data lives. After `reset_scopes()`
+        # every ContextVar sits at `'default'`. `apply_scopes_from_settings`
+        # sets the ones the task listed, leaving the rest at `'default'` — a
+        # real scope containing the user's memories, knowledge, people,
+        # goals. An agent (or any task) running through ExecutionContext
+        # without listing every registered scope would silently write into
+        # that personal bucket.
+        #
+        # The previous narrower fix gated this force-None only on
+        # `prompt == 'agent'`, but tasks can resolve to sapphire/rook/custom
+        # personas (and spawn_agent(prompt='self') inherits non-agent
+        # personas routinely). Three scouts converged on this exact gap.
+        # Drop the gate — apply the stronger invariant universally. Any task
+        # that doesn't EXPLICITLY list a scope key gets None (disabled) for
+        # that scope, not the registry default. Silent-default closed.
+        # Scout day-ruiner #1 / chaos #4 / #9 — 2026-04-21.
+        for name, reg in list(SCOPE_REGISTRY.items()):
+            setting_key = reg.get('setting')
+            if setting_key and setting_key not in self.task_settings:
+                try:
+                    reg['var'].set(None)
+                except Exception as e:
+                    logger.warning(f"[ExecCtx] Could not force-disable scope {name}: {e}")
         # Also clear rag/private since tasks don't use those
         self.fm.set_rag_scope(None)
         self.fm.set_private_chat(False)

@@ -613,11 +613,14 @@ class ContinuityExecutor:
                 field_map[setting_key] = setting_key
             # Sentinel values that mean "no preference, fall through to persona default".
             # For scope keys, 'none' is EXPLICIT opt-out ("disable this scope") and must
-            # NOT fall through — otherwise a task saying memory_scope='none' silently
-            # inherits the persona's real scope and writes into shared memory. That's
-            # the silent-default class of bug. Scout finding #5 — 2026-04-20.
+            # NOT fall through. 'default' is ALSO removed from the scope-key sentinel
+            # list (2026-04-21) — 'default' is a real scope name where user memories
+            # live, so treating it as a "please override me" sentinel meant an explicit
+            # task_val='default' got silently replaced by the persona's scope. Scout
+            # day-ruiner #4. Explicit 'default' now means exactly that: use the
+            # default scope. Non-scope fields keep the legacy sentinel list.
             _empty_sentinels = ("", "auto", "none", "default", None)
-            _empty_sentinels_scope = ("", "auto", "default", None)  # 'none' excluded
+            _empty_sentinels_scope = ("", "auto", None)  # 'none' AND 'default' excluded
             for persona_key, task_key in field_map.items():
                 persona_val = ps.get(persona_key)
                 task_val = resolved.get(task_key)
@@ -633,8 +636,13 @@ class ContinuityExecutor:
             logger.info(f"[Continuity] Resolved persona '{persona_name}' into task settings")
             return resolved
         except Exception as e:
-            logger.error(f"[Continuity] Persona resolution failed: {e}")
-            return task
+            # Previously this bare except returned the raw task, which meant
+            # scope keys silently fell to registry defaults ('default', a real
+            # scope) downstream. That's the silent-default class. Raise loudly
+            # so the caller's try/except surfaces the failure to the user
+            # instead of routing writes into the wrong scope. Scout chaos #4/#9.
+            logger.error(f"[Continuity] Persona resolution failed for '{persona_name}': {e}", exc_info=True)
+            raise
 
     def _snapshot_voice(self) -> Dict[str, Any]:
         """Snapshot current TTS voice/pitch/speed for later restore."""
