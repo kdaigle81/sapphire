@@ -846,7 +846,13 @@ async function refreshPreview() {
     try {
         const fresh = await getPrompt(selected);
         if (fresh) {
-            selectedData.compiled = fresh.compiled;
+            // Backend /api/prompts/{name} returns the (re-)assembled text in
+            // `.content` — there's no `.compiled` field. Previously this wrote
+            // to selectedData.compiled which was always undefined, and
+            // renderPreview fell back to the stale selectedData.content from
+            // initial load — the preview never updated after a piece edit.
+            // TODO L133 — 2026-04-21.
+            selectedData.content = fresh.content;
             selectedData.char_count = fresh.char_count;
         }
     } catch { /* ignore */ }
