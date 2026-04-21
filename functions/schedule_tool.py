@@ -19,22 +19,21 @@ TOOLS = [
         "function": {
             "name": "schedule_task",
             "description": (
-                "Schedule a future task for yourself. Use this when you want to do something later — "
-                "reminders, check-ins, follow-ups, monitoring, or anything time-based. "
-                "For one-shot tasks, use a simple time like '5pm' or '17:00'. "
-                "For recurring tasks, use a cron expression like '0 17 * * *' (5pm daily) or '0 9 * * 1' (9am Mondays). "
-                "The description becomes what you'll be asked to do when the task fires."
+                "Schedule a future task for yourself.\n"
+                "  time='5pm' or '17:00' — one-shot (auto-deletes after firing)\n"
+                "  time='0 17 * * *' — cron (recurring)\n"
+                "description becomes the prompt you'll receive when it fires."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "description": {
                         "type": "string",
-                        "description": "What to do when this task fires. Be specific — this is the prompt a future instance of you will receive."
+                        "description": "Prompt future-you will receive. Be specific."
                     },
                     "time": {
                         "type": "string",
-                        "description": "When to run. Simple time for one-shot: '5pm', '17:00', '1700', '2:30pm'. Cron for recurring: '0 17 * * *', '30 9 * * 1-5'."
+                        "description": "One-shot ('5pm', '17:00', '1700', '2:30pm') or cron ('0 17 * * *', '30 9 * * 1-5')"
                     }
                 },
                 "required": ["description", "time"]

@@ -32,24 +32,20 @@ TOOLS = [
         "function": {
             "name": "save_claude_memory",
             "description": (
-                "Save a memory to Claude's persistent memory scope — visible to future "
-                "Claude Code sessions. Use for cross-session continuity: decisions made, "
-                "context about Krem, what was built, what's still open. Keep under 450 "
-                "characters — be concise. Optionally tag with 'label' to categorize "
-                "(e.g. 'for:sapphire' for notes meant for Sapphire to read; "
-                "'session:YYYYMMDD-HHMM' for session fingerprint; 'shared' for memories "
-                "both Claude and Sapphire reference)."
+                "Save to Claude's cross-session memory scope. Under 450 chars. "
+                "Tag with label for filtering. Examples: 'for:sapphire', "
+                "'session:YYYYMMDD-HHMM', 'shared'."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "content": {
                         "type": "string",
-                        "description": "The memory content to save."
+                        "description": "Memory content"
                     },
                     "label": {
                         "type": "string",
-                        "description": "Optional label/tag for filtering."
+                        "description": "Tag for filtering"
                     }
                 },
                 "required": ["content"]
@@ -61,10 +57,7 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "search_claude_memory",
-            "description": (
-                "Search Claude's persistent memory scope via semantic + full-text search. "
-                "Use at session start to load continuity, or anytime to recall past context."
-            ),
+            "description": "Semantic + FTS search over Claude's memory scope.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -74,11 +67,11 @@ TOOLS = [
                     },
                     "label": {
                         "type": "string",
-                        "description": "Filter by label (e.g. 'for:sapphire', 'shared', or a session fingerprint)"
+                        "description": "Filter by label (e.g. 'for:sapphire', 'shared')"
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Max results (default 10)",
+                        "description": "Max results",
                         "default": 10
                     }
                 },
@@ -91,21 +84,18 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "get_recent_claude_memories",
-            "description": (
-                "Get the most recent entries from Claude's memory scope. Use at session "
-                "start to catch up on recent context without a specific query."
-            ),
+            "description": "Recent entries from Claude's memory scope. Use at session start.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "count": {
                         "type": "integer",
-                        "description": "How many recent memories to retrieve (default 10)",
+                        "description": "How many",
                         "default": 10
                     },
                     "label": {
                         "type": "string",
-                        "description": "Optional filter by label"
+                        "description": "Filter by label"
                     }
                 }
             }
@@ -116,13 +106,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "delete_claude_memory",
-            "description": "Delete an entry from Claude's memory scope by ID.",
+            "description": "Delete from Claude's memory scope by id (shown as [N]).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "memory_id": {
                         "type": "integer",
-                        "description": "The memory ID to delete (shown in brackets [N])"
+                        "description": "Memory id"
                     }
                 },
                 "required": ["memory_id"]
@@ -135,24 +125,25 @@ TOOLS = [
         "function": {
             "name": "read_claude_memory",
             "description": (
-                "Read entries from Claude's memory scope. Use to see what Claude has "
-                "saved — including notes addressed to you (search label 'for:sapphire') "
-                "or goodbyes from past sessions. Read-only — you cannot write here."
+                "Read Claude's memory scope (read-only).\n"
+                "  query='X' — search\n"
+                "  label='for:sapphire' — notes addressed to you\n"
+                "  (none) — most recent"
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Optional search query. Omit for most recent entries."
+                        "description": "Search query. Omit for recent."
                     },
                     "label": {
                         "type": "string",
-                        "description": "Optional label filter (e.g. 'for:sapphire')"
+                        "description": "Filter (e.g. 'for:sapphire')"
                     },
                     "count": {
                         "type": "integer",
-                        "description": "Max results (default 10)",
+                        "description": "Max results",
                         "default": 10
                     }
                 }

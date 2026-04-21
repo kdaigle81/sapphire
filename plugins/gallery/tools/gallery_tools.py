@@ -19,17 +19,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "gallery_browse",
-            "description": (
-                "Browse the user's image collection. Lists subfolders and image counts at a path. "
-                "Start with gallery_browse('') to see top-level folders, then navigate deeper. "
-                "Use this to find what albums/folders are available before viewing images."
-            ),
+            "description": "Browse image folders. Lists subfolders + image counts. Start with path='' for root.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Folder path relative to gallery root. Empty string for root."
+                        "description": "Folder path from gallery root. '' = root."
                     }
                 },
                 "required": []
@@ -40,21 +36,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "gallery_grid",
-            "description": (
-                "View a grid of thumbnail images from a folder. Shows numbered thumbnails so you can "
-                "identify specific images to look at closer. Use gallery_browse first to find the folder, "
-                "then gallery_grid to see what's in it."
-            ),
+            "description": "Numbered thumbnail grid for a folder. Use gallery_browse to find the folder first.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Folder path relative to gallery root"
+                        "description": "Folder path from gallery root"
                     },
                     "page": {
                         "type": "integer",
-                        "description": "Page number (default 1). Each page shows a grid of thumbnails.",
+                        "description": "Page (default 1)",
                         "default": 1
                     }
                 },
@@ -66,21 +58,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "gallery_view",
-            "description": (
-                "View a single image at full preview resolution. Use the index number from gallery_grid "
-                "to specify which image. Good for seeing details, reading text in photos, or examining "
-                "specific images more closely."
-            ),
+            "description": "View one image at full preview. Use index from gallery_grid.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Folder path relative to gallery root"
+                        "description": "Folder path from gallery root"
                     },
                     "index": {
                         "type": "integer",
-                        "description": "Image index number (from gallery_grid overlay)"
+                        "description": "Image index from gallery_grid"
                     }
                 },
                 "required": ["path", "index"]

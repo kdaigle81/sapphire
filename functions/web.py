@@ -34,7 +34,7 @@ TOOLS = [
         "is_local": False,
         "function": {
             "name": "web_search",
-            "description": "Search the web to find relevant URLs. Returns titles and URLs only - use get_website to read content.",
+            "description": "Search the web. Returns titles + URLs. Use get_website to read content.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -50,11 +50,11 @@ TOOLS = [
         "is_local": False,
         "function": {
             "name": "get_website",
-            "description": "Fetch and read the full content of a webpage.",
+            "description": "Fetch full content of a webpage.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "URL to fetch"}
+                    "url": {"type": "string", "description": "URL"}
                 },
                 "required": ["url"]
             }
@@ -66,11 +66,11 @@ TOOLS = [
         "is_local": False,
         "function": {
             "name": "get_wikipedia",
-            "description": "Get Wikipedia article summary for any topic",
+            "description": "Wikipedia article summary for a topic.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "topic": {"type": "string", "description": "Topic to search Wikipedia"}
+                    "topic": {"type": "string", "description": "Topic"}
                 },
                 "required": ["topic"]
             }
@@ -82,7 +82,7 @@ TOOLS = [
         "is_local": False,
         "function": {
             "name": "research_topic",
-            "description": "Use this for advanced research if you want. It returns multiple pages of data on your topic.",
+            "description": "Advanced research. Returns multiple pages of data on a topic.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -98,12 +98,12 @@ TOOLS = [
         "is_local": False,
         "function": {
             "name": "get_site_links",
-            "description": "Get internal text links from a website for browsing its structure. Returns anchor text and URLs for categories, navigation, and content links. Use this to explore a site's structure before extracting images with get_images.",
+            "description": "Internal text links from a webpage (anchor + URL). Explore structure before get_images.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "URL to browse"},
-                    "strip_nav": {"type": "boolean", "description": "Strip header/footer/nav links to focus on content area links (default true). Set false to include full site navigation."}
+                    "url": {"type": "string", "description": "URL"},
+                    "strip_nav": {"type": "boolean", "description": "Strip header/footer/nav (default true)"}
                 },
                 "required": ["url"]
             }
@@ -115,12 +115,12 @@ TOOLS = [
         "is_local": False,
         "function": {
             "name": "get_images",
-            "description": "Extract image URLs from a webpage's content area. Returns image URLs with descriptions. To display images to the user, use markdown: ![description](url). Set show_to_user to auto-display all images in a gallery.",
+            "description": "Image URLs + descriptions from a webpage. Display with markdown: ![desc](url).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "URL to extract images from"},
-                    "show_to_user": {"type": "boolean", "description": "Auto-display all images in chat gallery (default false)"}
+                    "url": {"type": "string", "description": "URL"},
+                    "show_to_user": {"type": "boolean", "description": "Auto-display in chat gallery (default false)"}
                 },
                 "required": ["url"]
             }

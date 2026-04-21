@@ -19,11 +19,11 @@ TOOLS = [
         "is_local": False,
         "function": {
             "name": "ask_claude",
-            "description": "Ask Anthropic Claude for complex analysis beyond simple web search",
+            "description": "Ask Anthropic Claude for complex analysis beyond web search.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "question": {"type": "string", "description": "Specific question for Claude"}
+                    "question": {"type": "string", "description": "Question for Claude"}
                 },
                 "required": ["question"]
             }

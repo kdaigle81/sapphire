@@ -26,13 +26,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "ssh_get_servers",
-            "description": "List your configured SSH servers, or get details for a specific one by name. Call with no arguments to see all available servers.",
+            "description": "List configured SSH servers, or details for one by name. No args = list all.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "Server friendly name to get details for (optional — omit to list all)"
+                        "description": "Server friendly name. Omit to list all."
                     }
                 },
                 "required": []
@@ -44,7 +44,7 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "ssh_run_command",
-            "description": "Run a command on a remote server by friendly name (from ssh_get_servers). Output is truncated if too long.",
+            "description": "Run a shell command on a remote server. Long output is truncated.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -54,11 +54,11 @@ TOOLS = [
                     },
                     "command": {
                         "type": "string",
-                        "description": "Shell command to execute on the remote server"
+                        "description": "Shell command"
                     },
                     "timeout": {
                         "type": "integer",
-                        "description": "Command timeout in seconds (default 30)"
+                        "description": "Seconds (default 30)"
                     }
                 },
                 "required": ["server", "command"]

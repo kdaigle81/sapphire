@@ -43,14 +43,14 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "notepad_append_lines",
-            "description": "Append one or more lines to the end of your notepad.",
+            "description": "Append lines to the notepad.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "lines": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Lines to append to the notepad"
+                        "description": "Lines to append"
                     }
                 },
                 "required": ["lines"]
@@ -62,14 +62,14 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "notepad_delete_lines",
-            "description": "Delete specific lines by their line numbers.",
+            "description": "Delete lines by number.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "line_numbers": {
                         "type": "array",
                         "items": {"type": "integer"},
-                        "description": "Line numbers to delete (1-indexed)"
+                        "description": "1-indexed line numbers"
                     }
                 },
                 "required": ["line_numbers"]
@@ -81,17 +81,17 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "notepad_insert_line",
-            "description": "Insert a line after a specific line number. Use 0 to insert at the beginning.",
+            "description": "Insert a line after a line number. 0 = beginning.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "after_line": {
                         "type": "integer",
-                        "description": "Line number to insert after (0 = beginning, 1 = after first line)"
+                        "description": "Line to insert after (0 = beginning)"
                     },
                     "content": {
                         "type": "string",
-                        "description": "Content to insert"
+                        "description": "Line content"
                     }
                 },
                 "required": ["after_line", "content"]

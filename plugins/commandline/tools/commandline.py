@@ -23,17 +23,17 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "run_command",
-            "description": "Run a shell command on the local machine. Output is truncated if too long.",
+            "description": "Run a shell command locally. Long output truncated.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "Shell command to execute"
+                        "description": "Shell command"
                     },
                     "timeout": {
                         "type": "integer",
-                        "description": "Command timeout in seconds (default 30)"
+                        "description": "Seconds (default 30)"
                     }
                 },
                 "required": ["command"]

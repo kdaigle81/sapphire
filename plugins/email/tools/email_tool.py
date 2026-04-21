@@ -45,18 +45,18 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "get_inbox",
-            "description": "Fetch the latest emails from a mail folder. Returns names, subjects, and dates. Use read_email(index) to read full content.",
+            "description": "Latest emails from a folder. Returns names, subjects, dates. Use read_email(index) for full content.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "count": {
                         "type": "integer",
-                        "description": "Number of recent emails to fetch (default 20, max 50)"
+                        "description": "How many (default 20, max 50)"
                     },
                     "folder": {
                         "type": "string",
                         "enum": ["inbox", "sent", "archive"],
-                        "description": "Which mail folder to view (default: inbox)"
+                        "description": "Default inbox"
                     }
                 },
                 "required": []
@@ -68,13 +68,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "read_email",
-            "description": "Read the full content of an email by its index from the last get_inbox() call.",
+            "description": "Read full email by index from last get_inbox().",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "index": {
                         "type": "integer",
-                        "description": "Email index from get_inbox() results (1-based)"
+                        "description": "Index from get_inbox() (1-based)"
                     }
                 },
                 "required": ["index"]
@@ -86,14 +86,14 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "archive_emails",
-            "description": "Archive emails by their index numbers from the last get_inbox() call. Moves them to an Archive folder (not deleted — recoverable). Clears inbox cache so next get_inbox() reflects changes.",
+            "description": "Archive emails by index (from last get_inbox). Moves to Archive — recoverable.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "indices": {
                         "type": "array",
                         "items": {"type": "integer"},
-                        "description": "List of email indices to archive (1-based, from get_inbox)"
+                        "description": "Indices to archive (1-based)"
                     }
                 },
                 "required": ["indices"]
@@ -105,7 +105,7 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "get_recipients",
-            "description": "List contacts who are whitelisted for email. Returns IDs and names only (no addresses). Use the ID with send_email().",
+            "description": "Whitelisted email contacts (ids + names, no addresses). Use id with send_email.",
             "parameters": {
                 "type": "object",
                 "properties": {},

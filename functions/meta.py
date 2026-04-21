@@ -56,13 +56,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "view_prompt",
-            "description": "View a system prompt. Without name, shows current active prompt.",
+            "description": "View a system prompt. No name = current active.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "Optional: name of prompt to view"
+                        "description": "Prompt name"
                     }
                 },
                 "required": []
@@ -74,13 +74,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "switch_prompt",
-            "description": "Switch to a different system prompt. Without name, lists available prompts.",
+            "description": "Switch system prompt. No name = list available.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "Optional: name of prompt to activate"
+                        "description": "Prompt name"
                     }
                 },
                 "required": []
@@ -92,13 +92,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "reset_chat",
-            "description": "Clear all chat history and start fresh.",
+            "description": "Clear chat history. Start fresh.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "reason": {
                         "type": "string",
-                        "description": "Reason for resetting"
+                        "description": "Reason"
                     }
                 },
                 "required": ["reason"]
@@ -110,13 +110,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "change_username",
-            "description": "Change the user's name. Updates the setting used in prompts.",
+            "description": "Change the user's name. Updates the prompt-facing setting.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "The user's new name"
+                        "description": "New user name"
                     }
                 },
                 "required": ["name"]
@@ -128,13 +128,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "set_tts_voice",
-            "description": "Set TTS voice. Without name, lists current/available voices.",
+            "description": "Set TTS voice. No name = list available.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "Optional: voice name to set"
+                        "description": "Voice name"
                     }
                 },
                 "required": []
@@ -146,14 +146,14 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "list_tools",
-            "description": "List available tools. Without scope, shows currently enabled tools. Use 'all' to see every tool including inactive ones.",
+            "description": "List tools. Default: currently enabled. scope='all' = every tool.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "scope": {
                         "type": "string",
                         "enum": ["enabled", "all"],
-                        "description": "Optional: 'enabled' (default) or 'all'"
+                        "description": "Default enabled"
                     }
                 },
                 "required": []
@@ -166,13 +166,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "edit_prompt",
-            "description": "Replace the content of the current monolith prompt.",
+            "description": "Replace the current monolith prompt's content.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "content": {
                         "type": "string",
-                        "description": "New prompt content"
+                        "description": "New content"
                     }
                 },
                 "required": ["content"]
@@ -185,17 +185,17 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "set_piece",
-            "description": "Set a prompt component. For character/location/goals/etc: replaces value. For emotions/extras: adds to list.",
+            "description": "Set a prompt component. character/location/goals/etc replace. emotions/extras append to list.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "component": {
                         "type": "string",
-                        "description": "Component type: character, location, relationship, goals, format, scenario, emotions, extras"
+                        "description": "character | location | relationship | goals | format | scenario | emotions | extras"
                     },
                     "key": {
                         "type": "string",
-                        "description": "The piece key to set/add"
+                        "description": "Piece key"
                     }
                 },
                 "required": ["component", "key"]
@@ -207,13 +207,13 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "remove_piece",
-            "description": "Remove a piece from emotions or extras list.",
+            "description": "Remove a piece from emotions or extras.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "component": {
                         "type": "string",
-                        "description": "Component type: emotions or extras"
+                        "description": "emotions | extras"
                     },
                     "key": {
                         "type": "string",
@@ -229,21 +229,21 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "create_piece",
-            "description": "Create a new prompt piece, save to library, and activate it.",
+            "description": "Create a prompt piece, save to library, activate.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "component": {
                         "type": "string",
-                        "description": "Component type: character, location, relationship, goals, format, scenario, emotions, extras"
+                        "description": "character | location | relationship | goals | format | scenario | emotions | extras"
                     },
                     "key": {
                         "type": "string",
-                        "description": "Short identifier (lowercase, no spaces)"
+                        "description": "Identifier (lowercase, no spaces)"
                     },
                     "value": {
                         "type": "string",
-                        "description": "The text content"
+                        "description": "Text content"
                     }
                 },
                 "required": ["component", "key", "value"]
@@ -261,7 +261,7 @@ TOOLS = [
                 "properties": {
                     "component": {
                         "type": "string",
-                        "description": "Component type: character, location, relationship, goals, format, scenario, emotions, extras"
+                        "description": "character | location | relationship | goals | format | scenario | emotions | extras"
                     }
                 },
                 "required": ["component"]

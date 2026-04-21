@@ -45,7 +45,7 @@ TOOLS = [
         "network": True,
         "function": {
             "name": "calendar_today",
-            "description": "Get today's calendar events. Shows schedule with times and free hours. Use when asked about today's plans, meetings, or schedule.",
+            "description": "Today's calendar events with times and free hours.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -59,17 +59,17 @@ TOOLS = [
         "network": True,
         "function": {
             "name": "calendar_range",
-            "description": "Get calendar events for a date range. Use for checking upcoming days, this week, availability on specific dates.",
+            "description": "Calendar events for a date range (YYYY-MM-DD).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "start_date": {
                         "type": "string",
-                        "description": "Start date (YYYY-MM-DD). Defaults to today."
+                        "description": "YYYY-MM-DD. Default: today."
                     },
                     "end_date": {
                         "type": "string",
-                        "description": "End date (YYYY-MM-DD). Defaults to 7 days from start."
+                        "description": "YYYY-MM-DD. Default: start + 7 days."
                     }
                 },
                 "required": []
@@ -82,7 +82,7 @@ TOOLS = [
         "network": True,
         "function": {
             "name": "calendar_add",
-            "description": "Add an event to the calendar. Use when asked to schedule, book, or add something to the calendar.",
+            "description": "Add a calendar event.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -92,15 +92,15 @@ TOOLS = [
                     },
                     "start": {
                         "type": "string",
-                        "description": "Start datetime (YYYY-MM-DDTHH:MM) or date (YYYY-MM-DD) for all-day"
+                        "description": "YYYY-MM-DDTHH:MM for timed, or YYYY-MM-DD for all-day"
                     },
                     "end": {
                         "type": "string",
-                        "description": "End datetime (YYYY-MM-DDTHH:MM) or date (YYYY-MM-DD). Defaults to 1 hour after start."
+                        "description": "YYYY-MM-DDTHH:MM or YYYY-MM-DD. Default: start + 1 hour."
                     },
                     "description": {
                         "type": "string",
-                        "description": "Optional event description or notes"
+                        "description": "Notes"
                     }
                 },
                 "required": ["title", "start"]
@@ -113,13 +113,13 @@ TOOLS = [
         "network": True,
         "function": {
             "name": "calendar_delete",
-            "description": "Delete a calendar event by its number. Get the number from calendar_today or calendar_range first.",
+            "description": "Delete a calendar event. Get event number from calendar_today / calendar_range first.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "event_id": {
                         "type": "string",
-                        "description": "The event number to delete (e.g. '1' or '#1' from calendar results)"
+                        "description": "Event number from calendar results (e.g. '1' or '#1')"
                     }
                 },
                 "required": ["event_id"]

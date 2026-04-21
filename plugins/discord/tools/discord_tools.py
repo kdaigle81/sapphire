@@ -52,11 +52,11 @@ TOOLS = [
                 "properties": {
                     "channel": {
                         "type": "string",
-                        "description": "Channel name (e.g. 'general-bot-chat') or channel ID. Omit to use the channel that triggered this message."
+                        "description": "Name (e.g. 'general-bot-chat') or id. Omit = triggering channel."
                     },
                     "count": {
                         "type": "integer",
-                        "description": "Number of messages to fetch (default 20, max 50)",
+                        "description": "How many (default 20, max 50)",
                         "default": 20
                     }
                 },
@@ -68,17 +68,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "discord_send_message",
-            "description": "Send a message to a Discord channel. If no channel specified, replies to the channel that triggered this conversation.",
+            "description": "Send a Discord message. Omit channel = reply to triggering channel.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "channel": {
                         "type": "string",
-                        "description": "Channel name (e.g. 'general-bot-chat') or channel ID. Omit to reply to the triggering channel."
+                        "description": "Name (e.g. 'general-bot-chat') or id"
                     },
                     "text": {
                         "type": "string",
-                        "description": "Message text to send (max 2000 chars)"
+                        "description": "Message (max 2000 chars)"
                     }
                 },
                 "required": ["text"]

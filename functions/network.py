@@ -51,13 +51,13 @@ TOOLS = [
         "is_local": False,
         "function": {
             "name": "website_status",
-            "description": "Check if a website is up and responding",
+            "description": "Check if a website is up.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": "Website URL to check (e.g., reddit.com)"
+                        "description": "URL (e.g. reddit.com)"
                     }
                 },
                 "required": ["url"]

@@ -12,18 +12,18 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_self_info",
-            "description": "Get your current system status, configuration, date/time, active model, services, plugins, memory stats, and diagnostics. Use this when asked about yourself, your current state, what time it is, what model you're running, or to help troubleshoot issues.",
+            "description": "Your system status: time, model, services, plugins, memory stats, diagnostics.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "detail": {
                         "type": "string",
                         "enum": ["brief", "full"],
-                        "description": "brief = key info + time/date, full = everything including plugins, providers, tools, mind stats"
+                        "description": "brief=key info + time; full=everything"
                     },
                     "include_errors": {
                         "type": "boolean",
-                        "description": "Include last 20 WARNING/ERROR log lines for troubleshooting (default: false)"
+                        "description": "Include last 20 WARN/ERROR log lines (default false)"
                     }
                 },
                 "required": []

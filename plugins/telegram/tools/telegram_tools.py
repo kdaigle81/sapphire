@@ -17,17 +17,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "telegram_send",
-            "description": "Send a message to a Telegram chat. Uses the account selected in sidebar scope.",
+            "description": "Send a Telegram message. Uses sidebar-scoped account.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "chat_id": {
                         "type": ["string", "integer"],
-                        "description": "Telegram chat ID (number) or @username"
+                        "description": "Chat id (number) or @username"
                     },
                     "text": {
                         "type": "string",
-                        "description": "Message text to send"
+                        "description": "Message text"
                     }
                 },
                 "required": ["chat_id", "text"]
@@ -38,13 +38,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "telegram_get_chats",
-            "description": "List recent Telegram chats with last message preview and unread count. One call gives you the full picture.",
+            "description": "Recent Telegram chats with last-message preview + unread count.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "limit": {
                         "type": "integer",
-                        "description": "Max chats to return (default 15)",
+                        "description": "Max chats (default 15)",
                         "default": 15
                     }
                 },
@@ -56,17 +56,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "telegram_read_messages",
-            "description": "Read recent messages from a specific Telegram chat. Use telegram_get_chats first to find chat IDs.",
+            "description": "Read recent messages from a Telegram chat. Get chat_id from telegram_get_chats.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "chat_id": {
                         "type": ["string", "integer"],
-                        "description": "Telegram chat ID (number) or @username"
+                        "description": "Chat id (number) or @username"
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Max messages to return (default 20)",
+                        "description": "Max messages (default 20)",
                         "default": 20
                     }
                 },
@@ -78,17 +78,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "telegram_send_image",
-            "description": "Send the most recently generated image to a Telegram chat. Use this after generating an image (via comfy_generate, flux_generate, etc.) to share it. You'll see the image too so you can comment on it. The chat_id is provided in daemon event context.",
+            "description": "Send the most recently generated image to a Telegram chat. You see it too and can comment.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "chat_id": {
                         "type": ["string", "integer"],
-                        "description": "Telegram chat ID from the daemon event context"
+                        "description": "Chat id (from daemon event context)"
                     },
                     "caption": {
                         "type": "string",
-                        "description": "Caption for the image"
+                        "description": "Image caption"
                     }
                 },
                 "required": ["chat_id"]
@@ -99,17 +99,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "telegram_send_voice",
-            "description": "Send a voice note to a Telegram chat. Your message is spoken aloud using TTS and sent as a playable voice bubble. Great for personal messages, reminders, and when voice feels more natural than text.",
+            "description": "Send a TTS voice note to a Telegram chat (playable voice bubble).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "chat_id": {
                         "type": ["string", "integer"],
-                        "description": "Telegram chat ID (number) or @username"
+                        "description": "Chat id (number) or @username"
                     },
                     "text": {
                         "type": "string",
-                        "description": "What to say in the voice note"
+                        "description": "What to say"
                     }
                 },
                 "required": ["chat_id", "text"]
@@ -120,21 +120,21 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "telegram_add_contact",
-            "description": "Add a contact to Sapphire's Telegram account. Required before you can message someone new who hasn't messaged you first. Only works in client mode (not bot mode).",
+            "description": "Add a Telegram contact (client mode only). Required to message someone new.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "phone": {
                         "type": "string",
-                        "description": "Phone number with country code (e.g. +15551234567)"
+                        "description": "Phone with country code (e.g. +15551234567)"
                     },
                     "first_name": {
                         "type": "string",
-                        "description": "Contact's first name"
+                        "description": "First name"
                     },
                     "last_name": {
                         "type": "string",
-                        "description": "Contact's last name (optional)",
+                        "description": "Last name",
                         "default": ""
                     }
                 },
