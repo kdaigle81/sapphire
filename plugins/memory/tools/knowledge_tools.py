@@ -41,24 +41,32 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "save_person",
-            "description": "Save or update a person's contact info in your knowledge base. Upserts by name (case-insensitive). These are YOUR contacts — people you've learned about through conversation.",
+            "description": "Save or update a person. No id = upsert by name (case-insensitive). With id = edit that row (enables rename). Use append_notes to extend notes without overwriting.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "Person's name (unique key, case-insensitive)"
+                        "description": "Person's name. Upsert key when id omitted."
+                    },
+                    "id": {
+                        "type": "integer",
+                        "description": "Row id to edit. Get from search_knowledge."
                     },
                     "relationship": {
                         "type": "string",
-                        "description": "Relationship to user (e.g. 'father', 'friend', 'coworker')"
+                        "description": "Relationship (e.g. father, friend, coworker)"
                     },
-                    "phone": {"type": "string", "description": "Phone number"},
-                    "email": {"type": "string", "description": "Email address"},
-                    "address": {"type": "string", "description": "Physical address"},
+                    "phone": {"type": "string", "description": "Phone"},
+                    "email": {"type": "string", "description": "Email"},
+                    "address": {"type": "string", "description": "Address"},
                     "notes": {
                         "type": "string",
-                        "description": "Additional notes about this person"
+                        "description": "Notes. Replaces existing."
+                    },
+                    "append_notes": {
+                        "type": "string",
+                        "description": "Append to existing notes with newline. Mutex with notes."
                     }
                 },
                 "required": ["name"]
@@ -70,21 +78,21 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "save_knowledge",
-            "description": "Save information to your personal knowledge base under a category. This is YOUR notebook — use it to store reference data, research, notes, and things you've learned. Auto-creates the category if new. Long content is automatically chunked.\nExamples:\n  save_knowledge(category='recipes', content='...') — save a recipe\n  save_knowledge(category='project_notes', content='...') — save project info",
+            "description": "Save content under a category. Auto-creates categories. Long content chunks automatically.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "category": {
                         "type": "string",
-                        "description": "Category to save under (e.g. 'recipes', 'books', 'research'). Auto-creates if new."
+                        "description": "Category name. Auto-creates if new."
                     },
                     "content": {
                         "type": "string",
-                        "description": "The information to store"
+                        "description": "Content to save"
                     },
                     "description": {
                         "type": "string",
-                        "description": "Optional category description (only used when creating a new category)"
+                        "description": "Category description. Used only on first creation."
                     }
                 },
                 "required": ["category", "content"]
@@ -96,25 +104,25 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "search_knowledge",
-            "description": "Search, browse, or read from your personal knowledge base. This contains YOUR stored knowledge — people you know, things you've learned, and notes you've saved.\nExamples:\n  search_knowledge(query='mars') — find entries about mars\n  search_knowledge() — overview of all your categories and people\n  search_knowledge(category='books') — browse all entries in a category\n  search_knowledge(id=42) — read a specific entry in full\n  search_knowledge(query='orbital', category='physics') — search within a category",
+            "description": "Search/browse/read your knowledge base (people + categories + notes).\n  query='X' — semantic search\n  category='X' — browse a category\n  id=42 — read one entry in full\n  (none) — overview",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Search terms (optional — omit to browse)"
+                        "description": "Search terms. Omit to browse."
                     },
                     "category": {
                         "type": "string",
-                        "description": "Filter to or browse a specific category"
+                        "description": "Category to filter or browse."
                     },
                     "id": {
                         "type": "integer",
-                        "description": "Read a specific entry in full by its ID"
+                        "description": "Entry id to read in full."
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum results (default: 10)"
+                        "description": "Max results (default 10)."
                     }
                 },
                 "required": []
@@ -126,17 +134,17 @@ TOOLS = [
         "is_local": True,
         "function": {
             "name": "delete_knowledge",
-            "description": "Delete entries or categories from your knowledge base. You can only delete content YOU created — user-created content is protected. Deleting the last entry in a category auto-removes the category.\nExamples:\n  delete_knowledge(id=42) — delete a specific entry\n  delete_knowledge(category='old_research') — delete an entire category and all its entries",
+            "description": "Delete entries or categories you created. User-created content is protected. Last entry auto-removes the category.\n  id=42 — delete one entry\n  category='X' — delete category + all entries",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "id": {
                         "type": "integer",
-                        "description": "Delete a specific entry by its ID"
+                        "description": "Entry id to delete."
                     },
                     "category": {
                         "type": "string",
-                        "description": "Delete an entire category and all its entries"
+                        "description": "Category name to delete entirely."
                     }
                 },
                 "required": []
@@ -1524,13 +1532,43 @@ def _format_entry(r, query=None, max_len=4000):
 
 # ─── Tool Operations ─────────────────────────────────────────────────────────
 
-def _save_person(name, relationship=None, phone=None, email=None, address=None, notes=None, scope='default'):
+def _save_person(name, relationship=None, phone=None, email=None, address=None,
+                 notes=None, append_notes=None, person_id=None, scope='default'):
     if not name or not name.strip():
         return "Person name is required.", False
     if len(name) > 100:
         return "Name too long (max 100 chars).", False
+    if notes is not None and append_notes is not None:
+        return "Use notes OR append_notes, not both.", False
 
-    pid, is_new = create_or_update_person(name, relationship, phone, email, address, notes, scope=scope)
+    # id-based edit: verify the row exists before we call the backend, which
+    # would otherwise fall through to INSERT on a bad id and silently create
+    # a duplicate "John" next to the one she meant to edit.
+    if person_id is not None:
+        with _get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT 1 FROM people WHERE id = ? AND scope = ?', (person_id, scope))
+            if not cursor.fetchone():
+                return f"Person id {person_id} not found in scope '{scope}'.", False
+
+    # append_notes: fetch current, concat, treat as a notes update. Embedding
+    # refreshes because the backend re-embeds on any field change.
+    if append_notes is not None:
+        with _get_connection() as conn:
+            cursor = conn.cursor()
+            if person_id:
+                cursor.execute('SELECT id, notes FROM people WHERE id = ? AND scope = ?', (person_id, scope))
+            else:
+                cursor.execute('SELECT id, notes FROM people WHERE LOWER(name) = LOWER(?) AND scope = ?', (name.strip(), scope))
+            row = cursor.fetchone()
+        if not row:
+            return f"Person not found — can't append. Use save_person without append_notes to create.", False
+        person_id = row[0]
+        existing = row[1] or ''
+        notes = (existing + '\n' + append_notes).strip() if existing else append_notes.strip()
+
+    pid, is_new = create_or_update_person(name, relationship, phone, email, address, notes,
+                                          scope=scope, person_id=person_id)
     action = "Saved new" if is_new else "Updated"
     logger.info(f"{action} person [{pid}] '{name.strip()}' (scope: {scope})")
     return f"{action} contact: {name.strip()} (ID: {pid})", True
@@ -1768,6 +1806,8 @@ def execute(function_name, arguments, config):
                 email=arguments.get('email'),
                 address=arguments.get('address'),
                 notes=arguments.get('notes'),
+                append_notes=arguments.get('append_notes'),
+                person_id=arguments.get('id'),
                 scope=people_scope,
             )
 
