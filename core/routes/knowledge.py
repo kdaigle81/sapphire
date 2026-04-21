@@ -752,7 +752,6 @@ async def update_memory(memory_id: int, request: Request, _=Depends(require_logi
             raise HTTPException(status_code=404, detail="Memory not found")
 
         keywords = memory._extract_keywords(content)
-        label = data.get('label')
 
         embedding_blob = None
         embedding_provider = None
@@ -764,25 +763,28 @@ async def update_memory(memory_id: int, request: Request, _=Depends(require_logi
                 from core.embeddings import stamp_embedding
                 embedding_blob, embedding_provider, embedding_dim = stamp_embedding(embs[0], embedder)
 
-        # Only overwrite the embedding columns when we actually produced a
-        # fresh vector — a transient remote-embedder failure should NOT strip
-        # the row's existing vector off. Scout finding: this used to silently
-        # delete semantic-search reachability on every edit while remote was
-        # down.
+        # Sparse update — only touch columns the caller explicitly provided.
+        # Bugs this closes (2026-04-21):
+        #   - `label = data.get('label')` used to pass None on UI edits (which
+        #     don't send label) and UPDATE would null-out the existing label.
+        #   - `timestamp = CURRENT_TIMESTAMP` used to fire unconditionally,
+        #     resetting the creation time on every spelling correction.
+        # Embedding still re-computes when the content changes — that's the
+        # whole point of editing, and a fresh embedding preserves semantic
+        # reachability. But embedding columns only overwrite when we
+        # successfully produced a fresh vector (transient remote-embedder
+        # failure must not strip a good vector off).
+        updates, params = ['content = ?', 'keywords = ?'], [content, keywords]
+        if 'label' in data:
+            updates.append('label = ?'); params.append(data.get('label'))
         if embedding_blob is not None:
-            cursor.execute(
-                'UPDATE memories SET content = ?, keywords = ?, label = ?, '
-                'embedding = ?, embedding_provider = ?, embedding_dim = ?, '
-                'timestamp = CURRENT_TIMESTAMP WHERE id = ? AND scope = ?',
-                (content, keywords, label, embedding_blob,
-                 embedding_provider, embedding_dim, memory_id, scope)
-            )
-        else:
-            cursor.execute(
-                'UPDATE memories SET content = ?, keywords = ?, label = ?, '
-                'timestamp = CURRENT_TIMESTAMP WHERE id = ? AND scope = ?',
-                (content, keywords, label, memory_id, scope)
-            )
+            updates.extend(['embedding = ?', 'embedding_provider = ?', 'embedding_dim = ?'])
+            params.extend([embedding_blob, embedding_provider, embedding_dim])
+        params.extend([memory_id, scope])
+        cursor.execute(
+            f'UPDATE memories SET {", ".join(updates)} WHERE id = ? AND scope = ?',
+            params
+        )
         conn.commit()
     try:
         from core.mind_events import publish_mind_changed
