@@ -6,7 +6,7 @@
   "author": "sapphire",
   "icon": "\ud83e\ude90",
   "priority": 50,
-  "default_enabled": true,
+  "default_enabled": false,
   "capabilities": {
     "providers": {
       "embedding": {

@@ -387,6 +387,17 @@ class ExecutionContext:
                 tcs = m.get("tool_calls") or []
                 if not tcs:
                     break  # most-recent asst has no tool_calls — we're clean
+                # Defensive: a misbehaving provider adapter or hand-edited
+                # history could produce non-list tool_calls (dict, str). The
+                # set-comprehension below would iterate a string as chars and
+                # crash on `.get`, killing the whole task. Skip with a warning.
+                # Witch-hunt 2026-04-21 finding H11.
+                if not isinstance(tcs, list):
+                    logger.warning(
+                        f"[ExecCtx] _patch_dangling_tool_calls: msg[{idx}] tool_calls is "
+                        f"{type(tcs).__name__}, not list — skipping patch"
+                    )
+                    break
                 expected = {tc.get("id") for tc in tcs if isinstance(tc, dict) and tc.get("id")}
                 got = set()
                 insert_after = idx

@@ -23,6 +23,14 @@ router = APIRouter()
 _toggle_locks: dict[str, threading.Lock] = {}
 _toggle_locks_guard = threading.Lock()
 
+# Module-level mutex for the read-modify-write of user/webui/plugins.json.
+# Per-plugin locks above don't help when concurrent toggles target DIFFERENT
+# plugins — both reads see the same disk snapshot, both writes replace the
+# file, the second writer's payload was computed from pre-first-write state,
+# so the first toggle vanishes from disk silently. This guards the disk file
+# itself across plugin names. Witch-hunt 2026-04-21 finding H10.
+_user_plugins_file_mutex = threading.Lock()
+
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 STATIC_DIR = PROJECT_ROOT / "interfaces" / "web" / "static"
 
@@ -89,10 +97,19 @@ def _get_merged_plugins():
     # (default_enabled semantics). The plugin_loader is the source of truth
     # for what's actually active; merge its view into the returned dict so
     # frontend and backend agree.
+    #
+    # Snapshot under `_lock` and iterate the snapshot — concurrent
+    # rescan/uninstall pop entries under the same lock, so iterating the live
+    # dict can raise `RuntimeError: dictionary changed size during iteration`,
+    # which the outer except would swallow into a half-populated `enabled`
+    # list and frontend's `enabledPlugins` Set would silently hide scopes.
+    # Witch-hunt 2026-04-21 finding H7.
     try:
         from core.plugin_loader import plugin_loader
+        with plugin_loader._lock:
+            snapshot = list(plugin_loader._plugins.items())
         disk = set(merged["enabled"])
-        for name, info in plugin_loader._plugins.items():
+        for name, info in snapshot:
             if info.get("loaded") and info.get("enabled") and name not in disk:
                 merged["enabled"].append(name)
     except Exception:
@@ -200,55 +217,55 @@ async def toggle_plugin(plugin_name: str, request: Request, _=Depends(require_lo
         if plugin_name not in known:
             raise HTTPException(status_code=404, detail=f"Unknown plugin: {plugin_name}")
 
-        # Load existing user_data up-front so we can maintain the disabled list
-        # AND use its `enabled` list (NOT merged.enabled) as the write-back source.
-        # merged.enabled now includes runtime-active default_enabled plugins (for
-        # UI parity with the backend), so using it here would silently promote
-        # those plugins into the disk enabled list on any unrelated toggle.
-        # The user's disk state should only change for the plugin being toggled.
-        # TODO L132 — 2026-04-21.
+        # Read-modify-write of the user plugins.json must be atomic across
+        # plugin names — concurrent toggles of TWO different plugins both
+        # read the same disk snapshot and the second writer's payload was
+        # computed before the first writer's change landed, silently losing
+        # one toggle. Module-level `_user_plugins_file_mutex` guards the
+        # whole RMW. Witch-hunt 2026-04-21 finding H10.
         USER_WEBUI_DIR.mkdir(parents=True, exist_ok=True)
-        user_data = {}
-        if USER_PLUGINS_JSON.exists():
+        with _user_plugins_file_mutex:
+            user_data = {}
+            if USER_PLUGINS_JSON.exists():
+                try:
+                    with open(USER_PLUGINS_JSON, encoding='utf-8') as f:
+                        user_data = json.load(f)
+                except Exception:
+                    pass
+            enabled = list(user_data.get("enabled", []))
+            disabled = list(user_data.get("disabled", []))
+
+            # Determine current state from plugin_loader (handles default_enabled
+            # plugins that aren't in the persisted enabled list).
+            currently_enabled = plugin_name in enabled
             try:
-                with open(USER_PLUGINS_JSON, encoding='utf-8') as f:
-                    user_data = json.load(f)
+                from core.plugin_loader import plugin_loader as _pl
+                info = _pl.get_plugin_info(plugin_name)
+                if info:
+                    currently_enabled = info["enabled"]
             except Exception:
                 pass
-        enabled = list(user_data.get("enabled", []))
-        disabled = list(user_data.get("disabled", []))
 
-        # Determine current state from plugin_loader (handles default_enabled
-        # plugins that aren't in the persisted enabled list).
-        currently_enabled = plugin_name in enabled
-        try:
-            from core.plugin_loader import plugin_loader as _pl
-            info = _pl.get_plugin_info(plugin_name)
-            if info:
-                currently_enabled = info["enabled"]
-        except Exception:
-            pass
+            if currently_enabled:
+                if plugin_name in enabled:
+                    enabled.remove(plugin_name)
+                # Record explicit disable so default_enabled plugins stay off across reboots
+                if plugin_name not in disabled:
+                    disabled.append(plugin_name)
+                new_state = False
+            else:
+                if plugin_name not in enabled:
+                    enabled.append(plugin_name)
+                if plugin_name in disabled:
+                    disabled.remove(plugin_name)
+                new_state = True
 
-        if currently_enabled:
-            if plugin_name in enabled:
-                enabled.remove(plugin_name)
-            # Record explicit disable so default_enabled plugins stay off across reboots
-            if plugin_name not in disabled:
-                disabled.append(plugin_name)
-            new_state = False
-        else:
-            if plugin_name not in enabled:
-                enabled.append(plugin_name)
-            if plugin_name in disabled:
-                disabled.remove(plugin_name)
-            new_state = True
-
-        user_data["enabled"] = enabled
-        user_data["disabled"] = disabled
-        tmp_path = USER_PLUGINS_JSON.with_suffix('.tmp')
-        with open(tmp_path, 'w', encoding='utf-8') as f:
-            json.dump(user_data, f, indent=2)
-        tmp_path.replace(USER_PLUGINS_JSON)
+            user_data["enabled"] = enabled
+            user_data["disabled"] = disabled
+            tmp_path = USER_PLUGINS_JSON.with_suffix('.tmp')
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                json.dump(user_data, f, indent=2)
+            tmp_path.replace(USER_PLUGINS_JSON)
 
         # Live load/unload — no restart needed for backend plugins
         reload_required = True

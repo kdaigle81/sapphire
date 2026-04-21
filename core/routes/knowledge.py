@@ -813,20 +813,38 @@ async def delete_memory_api(memory_id: int, request: Request, _=Depends(require_
 
 @router.get("/api/memory/export")
 async def export_memories(request: Request, _=Depends(require_login)):
-    """Export all memories in a scope as JSON (no vectors)."""
+    """Export all memories in a scope as JSON (no vectors).
+
+    Excludes private rows (those with `private_key` set) by default — the
+    whole point of the gate is that private content shouldn't be sitting
+    plaintext in a downloadable file. Pass `?include_private=1` to deliberately
+    include them; they'll round-trip through import correctly with their
+    private_key intact. Witch-hunt 2026-04-21 finding C1.
+    """
     from plugins.memory.tools import memory_tools as memory
     scope = request.query_params.get('scope', 'default')
+    include_private = request.query_params.get('include_private') in ('1', 'true', 'yes')
     with memory._get_connection() as conn:
         cursor = conn.cursor()
         scope_sql, scope_params = memory._scope_condition(scope)
-        cursor.execute(
-            f'SELECT content, label, timestamp FROM memories WHERE {scope_sql} ORDER BY timestamp',
-            scope_params
-        )
-        entries = [{"text": r[0], "label": r[1], "timestamp": r[2]} for r in cursor.fetchall()]
+        if include_private:
+            cursor.execute(
+                f'SELECT content, label, timestamp, private_key FROM memories WHERE {scope_sql} ORDER BY timestamp',
+                scope_params,
+            )
+        else:
+            cursor.execute(
+                f'SELECT content, label, timestamp, private_key FROM memories WHERE {scope_sql} AND private_key IS NULL ORDER BY timestamp',
+                scope_params,
+            )
+        entries = [
+            {"text": r[0], "label": r[1], "timestamp": r[2], "private_key": r[3]}
+            for r in cursor.fetchall()
+        ]
     return {
-        "sapphire_export": True, "type": "memories", "version": 1,
+        "sapphire_export": True, "type": "memories", "version": 2,
         "scope": scope, "count": len(entries), "entries": entries,
+        "includes_private": include_private,
     }
 
 
@@ -850,9 +868,14 @@ async def find_duplicate_memories(request: Request, _=Depends(require_login)):
     with memory._get_connection() as conn:
         cursor = conn.cursor()
         scope_sql, scope_params = memory._scope_condition(scope)
+        # Exclude private rows from dedup. The response returns full content
+        # of both `keep` and `remove` rows in JSON — surfacing a private row
+        # next to its near-duplicate would leak plaintext. Dedup only across
+        # public rows. Witch-hunt 2026-04-21 finding C2.
         cursor.execute(
             f'SELECT id, content, timestamp, label, embedding, embedding_dim FROM memories '
             f'WHERE {scope_sql} AND embedding IS NOT NULL AND embedding_provider = ? '
+            f'AND private_key IS NULL '
             f'ORDER BY timestamp',
             scope_params + [active_provider]
         )
@@ -938,7 +961,12 @@ async def import_memories(request: Request, _=Depends(require_login)):
             skipped += 1
             continue
         label = entry.get("label")
-        memory._save_memory(text, label=label, scope=scope)
+        # Preserve private_key on round-trip. Without this, an export that
+        # included private rows (via ?include_private=1) would re-import as
+        # public, permanently losing the gating word. Witch-hunt 2026-04-21
+        # finding C3.
+        private_key = entry.get("private_key")
+        memory._save_memory(text, label=label, scope=scope, private_key=private_key)
         existing_hashes.add(text_hash)
         imported += 1
 

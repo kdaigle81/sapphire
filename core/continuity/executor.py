@@ -187,9 +187,12 @@ class ContinuityExecutor:
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        # Resolve persona defaults into task (task-level fields override persona)
-        task = self._resolve_persona(task)
-
+        # Resolve persona defaults into task (task-level fields override persona).
+        # `_resolve_persona` raises on malformed-persona / lookup failure (today's
+        # change). Build the result dict FIRST so we can return a shaped error
+        # if persona resolution explodes — without this, the raise propagates
+        # before the result dict exists and the scheduler's outer except has
+        # to fabricate state. Witch-hunt 2026-04-21 finding H12.
         result = {
             "success": False,
             "task_id": task.get("id"),
@@ -198,6 +201,14 @@ class ContinuityExecutor:
             "responses": [],
             "errors": []
         }
+        try:
+            task = self._resolve_persona(task)
+        except Exception as e:
+            err = f"Persona resolution failed: {e}"
+            logger.error(f"[Continuity] {err}", exc_info=True)
+            result["errors"].append(err)
+            result["completed_at"] = datetime.now().isoformat()
+            return result
 
         chat_target = task.get("chat_target", "").strip()
 

@@ -23,6 +23,12 @@ def _backup_filter(tarinfo):
     # .tmp rename files + .tmp.<pid>.<id> from PluginState._save
     if name.endswith('.tmp') or '.tmp.' in name:
         return None
+    # MCP bearer key files (any plugin) — plaintext live credentials. Backups
+    # land on RAID + offsite sync; including these spreads the key everywhere.
+    # Krem keeps them recoverable via re-generation in the plugin UI; backup
+    # exclusion is the right tradeoff. Witch-hunt 2026-04-21 finding C5.
+    if name.endswith('_mcp_key.json'):
+        return None
     return tarinfo
 
 
@@ -62,7 +68,14 @@ class Backup:
         return f"Scheduled backup complete: {', '.join(results)}"
 
     def create_backup(self, backup_type="manual"):
-        """Create a backup of the user/ directory."""
+        """Create a backup of the user/ directory.
+
+        Writes to `<filename>.partial` first, atomic-renames to final name on
+        success. Without this, a disk-full / kill-mid-write leaves a truncated
+        `.tar.gz` that `list_backups` parses as legitimate, and rotation may
+        delete older valid backups in favor of the partial. Witch-hunt
+        2026-04-21 finding H13.
+        """
         if not self.user_dir.exists():
             logger.error(f"User directory not found: {self.user_dir}")
             return None
@@ -70,18 +83,29 @@ class Backup:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
         filename = f"sapphire_{timestamp}_{backup_type}.tar.gz"
         filepath = self.backup_dir / filename
+        partial = filepath.with_suffix('.gz.partial')
 
         try:
             # Checkpoint SQLite WAL files before backup to ensure consistent snapshots
             self._checkpoint_databases()
-            with tarfile.open(filepath, "w:gz") as tar:
+            with tarfile.open(partial, "w:gz") as tar:
                 tar.add(self.user_dir, arcname="user", filter=_backup_filter)
+            # Atomic rename — `list_backups` glob excludes `.partial` so a
+            # truncated archive never appears as a legitimate backup.
+            partial.replace(filepath)
 
             size_mb = filepath.stat().st_size / (1024 * 1024)
             logger.info(f"Created backup: {filename} ({size_mb:.2f} MB)")
             return filename
         except Exception as e:
             logger.error(f"Backup failed: {e}")
+            # Clean up partial on failure so it doesn't accumulate.
+            try:
+                partial.unlink()
+            except FileNotFoundError:
+                pass
+            except Exception as cleanup_err:
+                logger.warning(f"Backup partial cleanup failed: {cleanup_err}")
             return None
 
     def _checkpoint_databases(self):

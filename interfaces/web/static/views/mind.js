@@ -171,7 +171,14 @@ async function render() {
             activeTab = btn.dataset.tab;
             memoryPage = 0;
             const chatScope = await _scopeForActiveChatTab(activeTab);
+            const scopeChanged = chatScope && chatScope !== currentScope;
             if (chatScope) currentScope = chatScope;
+            // If the auto-sync changed scope, reset memory-card filter state
+            // for the same reason as the manual scope dropdown handler. H17.
+            if (scopeChanged) {
+                _memSearch = ''; _memSort = 'newest';
+                _memLabelFilter = null; _memShowAll = false;
+            }
             updateScopeDropdown();
             renderContent();
         });
@@ -181,6 +188,14 @@ async function render() {
     container.querySelector('#mind-scope').addEventListener('change', (e) => {
         currentScope = e.target.value;
         memoryPage = 0;
+        // Reset memory-card filter state — without this, typing "boss" in
+        // 'work' scope and switching to 'home' lands on Memories with the
+        // search box still saying "boss" and zero results, looks broken.
+        // Witch-hunt 2026-04-21 finding H17.
+        _memSearch = '';
+        _memSort = 'newest';
+        _memLabelFilter = null;
+        _memShowAll = false;
         renderContent();
     });
 
