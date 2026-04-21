@@ -308,6 +308,11 @@ class ExecutionContext:
                     "tool_calls": tool_calls
                 })
                 self.tool_log.extend(tc.get('function', {}).get('name', '?') for tc in tool_calls)
+                # Cap at source: a runaway agent can append thousands. The
+                # poll-payload cap in BaseWorker.to_dict is a safety net; this
+                # is the actual bound. Keep the last 500. Scout longevity #3.
+                if len(self.tool_log) > 500:
+                    del self.tool_log[:-500]
                 tools_executed, tool_images = self.tool_engine.execute_tool_calls(
                     tool_calls, messages, None, self.provider, scopes=self.scopes,
                     allowed_tools=self._allowed_tool_names
@@ -315,12 +320,27 @@ class ExecutionContext:
                 if tool_images:
                     _inject_tool_images(messages, tool_images)
                 logger.info(f"[ExecCtx] Loop {i+1}: {tools_executed} tools executed")
+                # If the LLM requested tool calls but NONE executed (hallucinated
+                # tool names filtered out by allowed_tools, every call rejected),
+                # continuing just invites the LLM to re-request the same ghosts
+                # forever. Break with degraded_reason so the caller sees amber.
+                # Scout chaos #6.
+                if tools_executed == 0:
+                    self.degraded_reason = (
+                        f"LLM requested {len(tool_calls)} tool call(s) but none "
+                        f"executed (likely hallucinated names not in toolset). "
+                        f"Breaking loop to avoid infinite retry."
+                    )
+                    logger.warning(f"[ExecCtx] {self.degraded_reason}")
+                    break
                 continue
 
             elif response_msg.content:
                 fn_data = self.tool_engine.extract_function_call_from_text(response_msg.content)
                 if fn_data:
                     self.tool_log.append(fn_data.get('name', '?'))
+                    if len(self.tool_log) > 500:
+                        del self.tool_log[:-500]
                     filtered = filter_to_thinking_only(response_msg.content)
                     _, tool_images = self.tool_engine.execute_text_based_tool_call(
                         fn_data, filtered, messages, None, self.provider, scopes=self.scopes,

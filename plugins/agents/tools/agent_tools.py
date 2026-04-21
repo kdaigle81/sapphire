@@ -335,11 +335,18 @@ def _get_active_chat():
         return ''
 
 
-def _get_current_chat_persona():
+def _get_current_chat_persona(chat_name: str = None):
     """Return the persona name the current execution is running under.
 
     Used by spawn_agent to resolve the special `prompt='self'` keyword —
     "spawn an agent that inherits the spawning context's current persona".
+
+    If `chat_name` is provided, look up the persona FOR THAT CHAT by name
+    instead of reading whichever chat is active at call time. Without this,
+    a concurrent tab switch or voice trigger between spawn entry and this
+    lookup flips the "active chat" underneath us — the agent inherits the
+    wrong chat's persona and scopes. Callers must snapshot the chat name
+    at spawn entry and pass it through. Scout day-ruiner #5.
 
     **Priority order (Scout #7 — 2026-04-20):**
       1. If we're inside an ExecutionContext run (agent task, heartbeat task,
@@ -360,7 +367,15 @@ def _get_current_chat_persona():
         pass
     from core.api_fastapi import get_system
     try:
-        settings = get_system().llm_chat.session_manager.get_chat_settings()
+        sm = get_system().llm_chat.session_manager
+        # If caller snapshotted a specific chat at spawn entry, read THAT
+        # chat's settings directly — don't re-read the live active-chat
+        # pointer, which may have changed between spawn entry and this
+        # resolution. Scout day-ruiner #5.
+        if chat_name:
+            settings = sm.read_chat_settings(chat_name) or {}
+        else:
+            settings = sm.get_chat_settings()
         persona = settings.get('persona')
         return persona if persona else None
     except Exception:
@@ -519,7 +534,10 @@ def _spawn_agent(manager, arguments, ps):
         # would otherwise bypass the 'self' check and end up with no persona.
         requested_prompt = arguments.get('prompt') or 'agent'
         if requested_prompt == 'self':
-            inherited = _get_current_chat_persona()
+            # Pass the chat_name we snapshotted at spawn entry (line ~502) so
+            # concurrent active-chat switches don't flip the persona underneath
+            # us between entry and this resolution. Scout day-ruiner #5.
+            inherited = _get_current_chat_persona(chat_name=chat_name)
             requested_prompt = inherited or 'agent'
             logger.info(f"[agents] spawn_agent: prompt='self' resolved to '{requested_prompt}'")
         kwargs['prompt'] = requested_prompt

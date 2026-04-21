@@ -25,6 +25,11 @@ class _ReembedState:
         self.running = False
         self.cancel_requested = False
         self.thread = None
+        # Provenance snapshot taken at start under _state.lock so the worker
+        # sees the SAME provider tuple the user was committing to at
+        # start_reembed time — not whatever the singleton happens to be when
+        # the thread wakes up. Closes the release-then-spawn race (scout #1/#2).
+        self.start_prov = (None, None)
         # Progress counters
         self.total = 0
         self.done = 0
@@ -77,9 +82,17 @@ def start_reembed():
     Refuses if another re-embed is running. Runs the entire pipeline on a
     daemon thread so the HTTP caller returns immediately.
     """
+    from core.embeddings import current_provenance
     with _state.lock:
         if _state.running:
             return False, "Re-embed is already running"
+        # Capture provenance INSIDE the lock, before spawning the worker. If
+        # we released first and a concurrent switch fired between release and
+        # the worker's own current_provenance() read, the worker would stamp
+        # rows under the NEW provider — the "interlock" advertised by
+        # switch_embedding_provider's refusal-while-running guard would be a
+        # lie for that window. Scout race #1/#2.
+        _state.start_prov = current_provenance()
         _state.running = True
         _state.cancel_requested = False
         _state.total = 0
@@ -91,7 +104,21 @@ def start_reembed():
         _state.finished_at = None
 
     thread = threading.Thread(target=_run, daemon=True, name='embed-reembed')
-    thread.start()
+    # Guard thread.start() — if pthread spawn fails (OS resource exhaustion,
+    # pthread limit), the finally in _run never runs, _state.running stays
+    # True forever, switch_embedding_provider refuses swaps forever, UI sits
+    # at 0/0. Scout race #10.
+    try:
+        thread.start()
+    except Exception as e:
+        logger.error(f"[reembed] Worker thread spawn failed: {e}")
+        with _state.lock:
+            _state.running = False
+            _state.last_error = f"Worker thread spawn failed: {e}"
+            _state.finished_at = time.time()
+            _state.current_table = 'error'
+        _publish()
+        return False, f"Failed to start re-embed worker: {e}"
     with _state.lock:
         _state.thread = thread
 
@@ -307,12 +334,13 @@ def _run():
                 _state.last_error = "Active embedding provider is not available"
             return
 
-        # Snapshot the provenance we started with. If the active provider
-        # changes mid-run (user toggles, plugin unloads, etc.), stamped rows
-        # would land under the OLD provider id in a DB whose active provider
-        # is NEW — making integrity strictly worse. Between-table checks
-        # below bail cleanly if drift is detected. Scout finding #4.
-        start_prov = current_provenance()
+        # Use the provenance captured atomically in start_reembed under
+        # _state.lock — NOT a fresh read here. If we called
+        # current_provenance() now, a concurrent switch firing between
+        # start_reembed's lock-release and this line would silently update
+        # the singleton; we'd see the new provider and happily stamp under
+        # it. That was the race. Scout race #1/#2.
+        start_prov = _state.start_prov
 
         counts = _count_pending(embedder)
         with _state.lock:

@@ -24,7 +24,13 @@ class ContinuityExecutor:
             system: VoiceChatSystem instance with llm_chat, tts, etc.
         """
         self.system = system
-        self._voice_lock = threading.Lock()  # guards TTS voice snapshot/apply/restore
+        # RLock (reentrant) — guards TTS voice snapshot/apply/restore. Non-reentrant
+        # Lock caused a self-deadlock this morning when the finally block re-entered
+        # via `with self._voice_lock:`. RLock also defends against any future tool
+        # that calls back into the executor while a task is running (spawn_agent,
+        # nested continuity triggers, future cross-task coordination) — that path
+        # would deadlock on re-acquire with a plain Lock. Scout chaos #17/#18.
+        self._voice_lock = threading.RLock()
 
     @staticmethod
     def _format_event_data(event_data: str) -> str:
