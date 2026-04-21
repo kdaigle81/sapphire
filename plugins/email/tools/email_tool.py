@@ -138,7 +138,7 @@ _send_props = {
         "description": "Direct email address. Requires allow-all-recipients setting. Not with recipient_id."
     },
 }
-_send_desc = "Send an email.\n  recipient_id=N — to a contact (from get_recipients)\n  reply_to_index=N — reply to inbox entry (from get_inbox)\n  address='x@y' — direct (requires allow-all)"
+_send_desc = "Send an email. One of recipient_id / reply_to_index / address is required.\n  recipient_id=N — to a contact (from get_recipients)\n  reply_to_index=N — reply to inbox entry (from get_inbox)\n  address='x@y' — direct (requires allow-all)"
 
 TOOLS.append({
     "type": "function",

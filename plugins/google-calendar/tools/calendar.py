@@ -82,7 +82,7 @@ TOOLS = [
         "network": True,
         "function": {
             "name": "calendar_add",
-            "description": "Add a calendar event.",
+            "description": "Add a calendar event. Times are local (user's timezone) — do NOT add 'Z' or offsets.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -92,11 +92,11 @@ TOOLS = [
                     },
                     "start": {
                         "type": "string",
-                        "description": "YYYY-MM-DDTHH:MM for timed, or YYYY-MM-DD for all-day"
+                        "description": "Local time. YYYY-MM-DDTHH:MM for timed, YYYY-MM-DD for all-day."
                     },
                     "end": {
                         "type": "string",
-                        "description": "YYYY-MM-DDTHH:MM or YYYY-MM-DD. Default: start + 1 hour."
+                        "description": "Local time. Default: start + 1 hour."
                     },
                     "description": {
                         "type": "string",
