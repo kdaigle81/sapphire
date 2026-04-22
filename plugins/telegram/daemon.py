@@ -174,6 +174,21 @@ async def _connect_accounts(plugin_loader, api_id: int, api_hash: str):
                 if not await client.is_user_authorized():
                     logger.warning(f"[TELEGRAM] Account '{account_name}' session expired — skipping")
                     await client.disconnect()
+                    # Surface the silent-dead-daemon state to the UI. Mirrors
+                    # the wakeword pattern (sapphire.py:280) so the user sees
+                    # "Telegram account X needs re-auth" instead of the UI
+                    # showing "enabled" while the daemon is silently deaf.
+                    # Day-ruiner H7 2026-04-22.
+                    try:
+                        from core.event_bus import publish, Events
+                        publish(Events.CONTINUITY_TASK_ERROR, {
+                            "task": "Telegram",
+                            "error": f"Telegram account '{account_name}' session expired. "
+                                     f"Daemon skipped this account — re-authenticate via "
+                                     f"Settings → Plugins → Telegram to restore messaging.",
+                        })
+                    except Exception:
+                        pass
                     continue
 
             me = await client.get_me()
