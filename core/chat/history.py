@@ -642,8 +642,15 @@ class ChatSessionManager:
         
         # Track if we're in an active tool cycle (for Claude thinking_raw)
         self._in_tool_cycle = False
-        # Prevent chat switching during active streaming (would corrupt both chats)
-        self._is_streaming = False
+        # Prevent chat switching during active streaming (would corrupt both chats).
+        # 2026-04-22 — converted from single bool to counter. H4 made streaming
+        # state per-request (each /api/chat call gets its own StreamingChat) but
+        # this flag stayed a shared single-bool on session_manager — two
+        # concurrent streams on the same chat had the first finisher set
+        # False while the second was still running, defeating the append /
+        # delete / save guards. Counter represents how many streams are
+        # currently active; `_is_streaming` property reads > 0.
+        self._streaming_count = 0
         
         # Initialize database
         self._init_db()
@@ -664,6 +671,39 @@ class ChatSessionManager:
             self._load_chat("default")
 
         logger.info(f"ChatSessionManager initialized with SQLite storage")
+
+    # ── Streaming state (counter-backed) ──
+    # Per-request StreamingChat instances each own their own cancel_flag,
+    # ephemeral, current_stream — but the `am I streaming?` guard used by
+    # append_messages_to_chat / delete_chat / save-ordering needs to know
+    # whether ANY stream is active. That's a counter, not a bool.
+    # Writers use begin_streaming() / end_streaming(). Readers use the
+    # `_is_streaming` property. 2026-04-22 H4 follow-up.
+
+    @property
+    def _is_streaming(self) -> bool:
+        """True if at least one stream is active."""
+        return getattr(self, '_streaming_count', 0) > 0
+
+    @_is_streaming.setter
+    def _is_streaming(self, val):
+        """Back-compat setter — tests and legacy code that flip this bool
+        directly still work. Real writers should use begin/end_streaming()
+        for atomic concurrency-safe counting."""
+        self._streaming_count = 1 if val else 0
+
+    def begin_streaming(self):
+        """Increment active-stream counter. Safe for concurrent streams."""
+        with self._lock:
+            self._streaming_count = getattr(self, '_streaming_count', 0) + 1
+
+    def end_streaming(self):
+        """Decrement active-stream counter (floored at 0). Safe for
+        concurrent streams. A double-decrement (bug elsewhere) is silent
+        — counter stays at 0."""
+        with self._lock:
+            cur = getattr(self, '_streaming_count', 0)
+            self._streaming_count = cur - 1 if cur > 0 else 0
 
     @contextmanager
     def _get_connection(self):

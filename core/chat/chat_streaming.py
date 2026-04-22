@@ -87,7 +87,11 @@ class StreamingChat:
                 self.active_chat_name = self.main_chat.session_manager.get_active_chat_name()
             except Exception:
                 self.active_chat_name = None
-            self.main_chat.session_manager._is_streaming = True
+            # H4 follow-up 2026-04-22: was `_is_streaming = True` (single bool).
+            # Two concurrent streams on same chat had the first finisher set
+            # False while the second was still running → append_messages_to_chat
+            # guard failed → mid-turn history corruption. Counter fix.
+            self.main_chat.session_manager.begin_streaming()
 
             # Plugin pre_chat hook — can modify input, bypass LLM, or stop propagation
             if hook_runner.has_handlers("pre_chat"):
@@ -792,5 +796,5 @@ class StreamingChat:
             self.cancel_flag = False
             self.is_streaming = False
             self.active_chat_name = None
-            self.main_chat.session_manager._is_streaming = False
+            self.main_chat.session_manager.end_streaming()
             publish(Events.AI_TYPING_END)
