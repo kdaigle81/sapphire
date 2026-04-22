@@ -216,14 +216,16 @@ async def handle_chat_stream(request: Request, _=Depends(require_login), system=
     images = data.get('images', [])
     files = data.get('files', [])
 
-    system.llm_chat.streaming_chat.cancel_flag = False
+    # Per-request StreamingChat instance. Each /api/chat call gets its own
+    # — no more singleton stomping between tabs. H4 2026-04-22.
+    stream, sid, active_chat = system.llm_chat.begin_stream()
     system.web_active_inc()
 
     def generate():
         try:
             chunk_count = 0
-            for event in system.llm_chat.chat_stream(data['text'], prefill=prefill, skip_user_message=skip_user_message, images=images, files=files):
-                if system.llm_chat.streaming_chat.cancel_flag:
+            for event in stream.chat_stream(data['text'], prefill=prefill, skip_user_message=skip_user_message, images=images, files=files):
+                if stream.cancel_flag:
                     logger.info(f"STREAMING CANCELLED at chunk {chunk_count}")
                     yield f"data: {json.dumps({'cancelled': True})}\n\n"
                     break
@@ -256,9 +258,9 @@ async def handle_chat_stream(request: Request, _=Depends(require_login), system=
                         else:
                             yield f"data: {json.dumps({'type': 'content', 'text': str(event)})}\n\n"
 
-            if not system.llm_chat.streaming_chat.cancel_flag:
-                ephemeral = system.llm_chat.streaming_chat.ephemeral
-                logger.info(f"STREAMING COMPLETE: {chunk_count} chunks, ephemeral={ephemeral}")
+            if not stream.cancel_flag:
+                ephemeral = stream.ephemeral
+                logger.info(f"STREAMING COMPLETE: {chunk_count} chunks, ephemeral={ephemeral}, chat={active_chat!r}")
                 yield f"data: {json.dumps({'done': True, 'ephemeral': ephemeral})}\n\n"
 
         except ConnectionError as e:
@@ -272,7 +274,7 @@ async def handle_chat_stream(request: Request, _=Depends(require_login), system=
             msg = friendly_llm_error(e) or str(e)
             yield f"data: {json.dumps({'error': msg})}\n\n"
         finally:
-            system.llm_chat.streaming_chat.cancel_flag = True
+            system.llm_chat.end_stream(sid, active_chat)
             system.web_active_dec()
 
     return StreamingResponse(
@@ -290,26 +292,29 @@ async def handle_chat_stream(request: Request, _=Depends(require_login), system=
 async def handle_cancel(request: Request, _=Depends(require_login), system=Depends(get_system)):
     """Cancel ongoing streaming generation.
 
-    Optional `chat` query param scopes the cancel. If provided and doesn't
-    match the chat that's currently streaming, returns no-op — prevents a
-    cancel-click in tab A from killing tab B's generation. Without the
-    param, behavior is legacy-global. H5 2026-04-22 — partial fix; full
-    per-request streaming state is H4 architecture work.
+    Optional `chat` query param scopes the cancel to that chat's active
+    streams (every tab concurrently on the chat gets cancelled together).
+    Without the param, every active stream is flagged. H4/H5 2026-04-22.
     """
     try:
         requested_chat = request.query_params.get('chat')
-        streaming = system.llm_chat.streaming_chat
-        active_chat = getattr(streaming, 'active_chat_name', None)
-        if requested_chat and active_chat and requested_chat != active_chat:
-            logger.info(f"CANCEL: no-op — requested='{requested_chat}' active='{active_chat}'")
-            return {
-                "status": "no-op",
-                "message": f"No stream active for chat '{requested_chat}' "
-                           f"(currently streaming: '{active_chat}').",
-            }
-        streaming.cancel_flag = True
-        logger.info(f"CANCEL: Flag set (chat='{active_chat or 'unknown'}')")
-        return {"status": "success", "message": "Cancellation requested"}
+        count = system.llm_chat.cancel_streams(chat_name=requested_chat)
+        if count == 0:
+            if requested_chat:
+                logger.info(f"CANCEL: no-op — no active stream for chat '{requested_chat}'")
+                return {
+                    "status": "no-op",
+                    "message": f"No stream active for chat '{requested_chat}'.",
+                }
+            logger.info("CANCEL: no-op — no active streams")
+            return {"status": "no-op", "message": "No active streams."}
+        scope = f"chat '{requested_chat}'" if requested_chat else "all chats"
+        logger.info(f"CANCEL: Flagged {count} stream(s) in {scope}")
+        return {
+            "status": "success",
+            "message": f"Cancellation requested ({count} stream{'s' if count != 1 else ''} flagged).",
+            "cancelled": count,
+        }
     except Exception as e:
         logger.error(f"Error during cancellation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -372,7 +377,9 @@ async def get_unified_status(request: Request, _=Depends(require_login), system=
 
         tts_playing = getattr(system.tts, '_is_playing', False)
         active_chat = system.llm_chat.get_active_chat()
-        is_streaming = getattr(system.llm_chat.streaming_chat, 'is_streaming', False)
+        # H4 2026-04-22: was `streaming_chat.is_streaming` singleton read;
+        # now aggregates across per-request streams.
+        is_streaming = system.llm_chat.any_streaming() if hasattr(system.llm_chat, 'any_streaming') else False
 
         context_limit = getattr(config, 'CONTEXT_LIMIT', 32000)
         raw_messages = system.llm_chat.session_manager.get_messages()

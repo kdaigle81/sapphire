@@ -154,9 +154,77 @@ class LLMChat:
         self.function_manager = FunctionManager()
         
         self.tool_engine = ToolCallingEngine(self.function_manager)
-        self.streaming_chat = StreamingChat(self)
-        
+
+        # Per-request StreamingChat isolation — H4 2026-04-22.
+        # Was: `self.streaming_chat = StreamingChat(self)` (one shared
+        # instance; two tabs corrupt each other's state).
+        # Now: each chat_stream call gets its own StreamingChat via
+        # begin_stream(); tracked in dicts below so /api/cancel can target
+        # per-chat, and status can report any-streaming. Enables the
+        # many-personas/heartbeats isolation Krem wants.
+        import threading as _threading
+        self._streams_by_id = {}       # {stream_id: StreamingChat}
+        self._streams_by_chat = {}     # {chat_name: set(stream_id)}
+        self._streams_lock = _threading.Lock()
+
         logger.info("LLMChat.__init__ completed")
+
+    # ── Per-request streaming state API ──
+
+    def begin_stream(self, chat_name=None):
+        """Create a fresh StreamingChat, register it. Caller owns the ref.
+
+        Returns (stream, stream_id, chat_name_used). Pair with end_stream().
+        """
+        import secrets as _secrets
+        stream = StreamingChat(self)
+        sid = _secrets.token_hex(8)
+        if chat_name is None:
+            try:
+                chat_name = self.session_manager.get_active_chat_name() or ''
+            except Exception:
+                chat_name = ''
+        with self._streams_lock:
+            self._streams_by_id[sid] = stream
+            self._streams_by_chat.setdefault(chat_name, set()).add(sid)
+        stream.active_chat_name = chat_name
+        return stream, sid, chat_name
+
+    def end_stream(self, stream_id, chat_name):
+        """Unregister a stream. Idempotent."""
+        with self._streams_lock:
+            self._streams_by_id.pop(stream_id, None)
+            ids = self._streams_by_chat.get(chat_name)
+            if ids is not None:
+                ids.discard(stream_id)
+                if not ids:
+                    self._streams_by_chat.pop(chat_name, None)
+
+    def cancel_streams(self, chat_name=None):
+        """Set cancel_flag on active streams. If chat_name given, only that
+        chat's streams (including every tab concurrently on it). Otherwise
+        all active streams across all chats. Returns count of streams flagged.
+        """
+        with self._streams_lock:
+            if chat_name:
+                ids = list(self._streams_by_chat.get(chat_name, set()))
+            else:
+                ids = list(self._streams_by_id.keys())
+            targets = [self._streams_by_id[i] for i in ids if i in self._streams_by_id]
+        for s in targets:
+            s.cancel_flag = True
+        return len(targets)
+
+    def any_streaming(self):
+        """True if at least one stream is active."""
+        with self._streams_lock:
+            return bool(self._streams_by_id)
+
+    def streams_for_chat(self, chat_name):
+        """List of active StreamingChat instances for a chat (may be empty)."""
+        with self._streams_lock:
+            ids = list(self._streams_by_chat.get(chat_name, set()))
+            return [self._streams_by_id[i] for i in ids if i in self._streams_by_id]
 
     def _init_provider_legacy(self, llm_config, name):
         """Initialize an LLM provider from legacy config dict."""
@@ -352,9 +420,6 @@ class LLMChat:
         except Exception as e:
             logger.error(f"[RAG] Failed to get context: {e}", exc_info=True)
             return f"[RAG documents are configured but failed to load: {e}]"
-
-    def chat_stream(self, user_input: str, prefill: str = None, skip_user_message: bool = False, images: list = None, files: list = None):
-        return self.streaming_chat.chat_stream(user_input, prefill=prefill, skip_user_message=skip_user_message, images=images, files=files)
 
     def chat(self, user_input: str):
         try:

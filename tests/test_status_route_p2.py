@@ -35,8 +35,9 @@ def status_client(client, mock_system, monkeypatch):
     fm.get_current_toolset_info.return_value = {'name': 'default', 'function_count': 1}
     fm.has_network_tools_enabled.return_value = False
 
-    sc = mock_system.llm_chat.streaming_chat
-    sc.is_streaming = False
+    # H4 2026-04-22: status reads system.llm_chat.any_streaming() — was
+    # a direct read of streaming_chat.is_streaming on the singleton.
+    mock_system.llm_chat.any_streaming.return_value = False
 
     # TTS
     mock_system.tts._is_playing = False

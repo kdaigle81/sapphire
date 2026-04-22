@@ -375,7 +375,12 @@ class TestChatCoreIntegration:
             'set_system_prompt',
             'get_system_prompt_template',
             'chat',
-            'chat_stream',
+            # chat_stream wrapper removed 2026-04-22 (H4) — per-request
+            # streaming now via begin_stream/end_stream/cancel_streams.
+            'begin_stream',
+            'end_stream',
+            'cancel_streams',
+            'any_streaming',
         ]
         
         for method in expected_methods:

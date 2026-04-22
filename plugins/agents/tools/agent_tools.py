@@ -146,11 +146,18 @@ def _create_llm_worker():
         """Runs an isolated LLM + tool loop in a background thread."""
 
         def __init__(self, agent_id, name, mission, chat_name='', on_complete=None,
-                     model='', toolset='default', prompt='agent', **kwargs):
+                     model='', toolset='default', prompt='agent',
+                     _inherit_scopes=True, **kwargs):
             super().__init__(agent_id, name, mission, chat_name, on_complete)
             self._model = model
             self._toolset = toolset
             self._prompt = prompt
+            # When spawn_agent was called with prompt='self' (not an explicit
+            # persona name), this is False. `self` means "inherit identity
+            # (voice/prompt/toolset) but NOT data access (scopes)." The
+            # 'agent' persona's none-scope defaults apply via force-None
+            # closure in ExecutionContext. Direction A — H1 2026-04-22.
+            self._inherit_scopes = _inherit_scopes
 
         def run(self):
             from core.continuity.execution_context import ExecutionContext
@@ -206,6 +213,20 @@ def _create_llm_worker():
             # voice/spice don't apply to background agents — provider/model/toolset
             # are handled explicitly below via worker args).
             scope_settings = {k: v for k, v in persona_settings.items() if k.endswith('_scope')}
+
+            # H1 2026-04-22 (Direction A): if prompt='self' resolved to this
+            # persona, strip scope keys. 'self' means "same identity, no data
+            # access" — explicit persona names (prompt='sapphire' etc) keep
+            # full inherit. Root cause was: personas bundled identity +
+            # scope, and 'self' resolution silently brought the whole bundle.
+            if not self._inherit_scopes:
+                if scope_settings:
+                    logger.info(
+                        f"[agents] prompt='self' — dropping inherited scope "
+                        f"settings from '{self._prompt}' persona "
+                        f"({', '.join(scope_settings.keys())})"
+                    )
+                scope_settings = {}
 
             # Phase 5 fix (chaos scout): resolve the actual prompt file name from
             # the persona's nested `prompt` field. Persona names and prompt file
@@ -533,14 +554,19 @@ def _spawn_agent(manager, arguments, ps):
         # through to the lean default — an LLM explicitly passing `prompt=''`
         # would otherwise bypass the 'self' check and end up with no persona.
         requested_prompt = arguments.get('prompt') or 'agent'
+        resolved_from_self = False
         if requested_prompt == 'self':
             # Pass the chat_name we snapshotted at spawn entry (line ~502) so
             # concurrent active-chat switches don't flip the persona underneath
             # us between entry and this resolution. Scout day-ruiner #5.
             inherited = _get_current_chat_persona(chat_name=chat_name)
             requested_prompt = inherited or 'agent'
+            resolved_from_self = True
             logger.info(f"[agents] spawn_agent: prompt='self' resolved to '{requested_prompt}'")
         kwargs['prompt'] = requested_prompt
+        # H1 2026-04-22: 'self' = identity-only inherit. Explicit persona
+        # names (prompt='sapphire') keep full scope inherit.
+        kwargs['_inherit_scopes'] = not resolved_from_self
 
         # Resolve roster name to provider:model
         resolved_model = model_arg

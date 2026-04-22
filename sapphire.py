@@ -470,24 +470,27 @@ class VoiceChatSystem:
             self.tts_server_manager = None
             logger.info("Kokoro TTS server stopped")
 
-    def cancel_generation(self) -> bool:
+    def cancel_generation(self, chat_name: str = None) -> bool:
         """Public cancel for in-progress LLM streaming.
 
-        Replaces the `system.llm_chat.streaming_chat.cancel_flag = True`
-        reach-in that plugin docs previously advertised (voice-commands
-        stop hook, etc.). Plugin code should call this instead — keeps
-        the cancel surface owned by core, not by private-attribute
-        mutation on a sub-object. Returns True if the flag was set,
-        False if there's no streaming client to cancel.
-        Wolf-Claude finding 2026-04-21.
+        Since H4 (2026-04-22) streaming is per-request rather than a shared
+        singleton, this delegates to LLMChat.cancel_streams. Optional
+        chat_name scopes the cancel to one chat's active streams; omit to
+        cancel all active streams.
+
+        Called by voice-commands stop hook and any plugin that wants to
+        interrupt generation. Returns True if at least one stream was
+        flagged, False otherwise.
         """
         try:
-            streaming = getattr(getattr(self, 'llm_chat', None), 'streaming_chat', None)
-            if streaming is None:
+            llm_chat = getattr(self, 'llm_chat', None)
+            if llm_chat is None or not hasattr(llm_chat, 'cancel_streams'):
                 return False
-            streaming.cancel_flag = True
-            logger.info("cancel_generation: flag set via public API")
-            return True
+            count = llm_chat.cancel_streams(chat_name=chat_name)
+            if count:
+                logger.info(f"cancel_generation: flagged {count} stream(s)")
+                return True
+            return False
         except Exception as e:
             logger.warning(f"cancel_generation failed: {e}")
             return False
