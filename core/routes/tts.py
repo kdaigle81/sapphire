@@ -213,6 +213,22 @@ async def handle_transcribe(request: Request, audio: UploadFile = File(...), _=D
             pass
     if transcribed_text is None:
         raise HTTPException(status_code=500, detail="Transcription failed — check STT provider logs")
+
+    # post_stt hook — mirror wakeword pipeline. Plugins that correct /
+    # translate / normalize transcription need to see ALL STT input, not
+    # just the wake path. Before this the browser-mic route silently
+    # bypassed post_stt. H8 fix 2026-04-22.
+    try:
+        from core.hooks import hook_runner, HookEvent
+        if hook_runner.has_handlers("post_stt"):
+            import config as _cfg
+            stt_event = HookEvent(input=transcribed_text, config=_cfg,
+                                  metadata={"system": system})
+            hook_runner.fire("post_stt", stt_event)
+            transcribed_text = stt_event.input
+    except Exception as e:
+        logger.debug(f"post_stt hook fire failed: {e}")
+
     return {"text": transcribed_text, "quiet": transcribed_text == ""}
 
 

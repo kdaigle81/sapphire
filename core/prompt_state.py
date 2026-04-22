@@ -121,13 +121,28 @@ def get_prompt_char_count():
 
 
 def get_current_prompt():
-    """Get the currently active prompt (monolith or assembled)."""
+    """Get the currently active prompt (monolith or assembled).
+
+    If the active_preset names a prompt that doesn't exist (e.g. deleted
+    after a chat was configured with it), log a WARN and fall back to
+    assembled default. Pre-2026-04-22 this was silent. H3 fix — surfaces
+    the silent-default class so a deleted prompt doesn't quietly become
+    whatever happens to be in _assembled_state.
+    """
     preset = _assembled_state.get("active_preset", "default")
 
     if preset in prompt_manager.monoliths:
         mono = prompt_manager.monoliths[preset]
         text = mono.get('content', '') if isinstance(mono, dict) else mono
         return {"role": "system", "content": prompt_manager._replace_templates(text)}
+
+    # Not a monolith — is it a known scenario preset, or a missing name?
+    if preset != "default" and preset not in prompt_manager.scenario_presets:
+        logger.warning(
+            f"active_preset='{preset}' not found in monoliths or scenario "
+            f"presets — falling back to assembled default. Was it deleted "
+            f"without updating the active state?"
+        )
 
     return assemble_prompt()
 

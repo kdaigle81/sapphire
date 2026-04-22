@@ -21,6 +21,11 @@ class StreamingChat:
         self.current_stream = None
         self.ephemeral = False
         self.is_streaming = False
+        # Name of the chat currently streaming — lets /api/cancel refuse to
+        # cancel a DIFFERENT chat's stream (was global, cross-chat tabs
+        # interfered). Full per-request streaming state is H4 architecture
+        # work; this is the narrow scoping fix. H5 2026-04-22.
+        self.active_chat_name = None
 
     def _cleanup_stream(self):
         """Safely close current stream if it exists."""
@@ -78,6 +83,10 @@ class StreamingChat:
             self.cancel_flag = False
             self.current_stream = None
             self.ephemeral = False
+            try:
+                self.active_chat_name = self.main_chat.session_manager.get_active_chat_name()
+            except Exception:
+                self.active_chat_name = None
             self.main_chat.session_manager._is_streaming = True
 
             # Plugin pre_chat hook — can modify input, bypass LLM, or stop propagation
@@ -782,5 +791,6 @@ class StreamingChat:
             self._cleanup_stream()
             self.cancel_flag = False
             self.is_streaming = False
+            self.active_chat_name = None
             self.main_chat.session_manager._is_streaming = False
             publish(Events.AI_TYPING_END)

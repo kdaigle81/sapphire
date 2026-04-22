@@ -166,29 +166,47 @@ def save_prompt(name: str, data: dict, allow_overwrite: bool = True) -> tuple[bo
 
 
 def delete_prompt(name: str) -> bool:
-    """Delete a prompt from storage."""
+    """Delete a prompt from storage.
+
+    If the deleted prompt is currently active, auto-switch the active preset
+    to 'default' and publish SETTINGS_CHANGED. Without this, get_current_prompt
+    silently falls back to a stale assembled state — user deletes the active
+    prompt, next turn renders from whatever _assembled_state happens to hold.
+    Silent-default class. H3 fix 2026-04-22.
+    """
     try:
         deleted = False
-        
+
+        # Detect active-before-delete so we can loudly hand off. Check both
+        # the state-dict active_preset and the prompt_manager attr (they can
+        # drift — separate scout finding) to cover either source.
+        try:
+            was_active = (
+                prompt_state._assembled_state.get("active_preset") == name
+                or getattr(prompt_manager, '_active_preset_name', None) == name
+            )
+        except Exception:
+            was_active = False
+
         # Delete from monoliths if present
         if name in prompt_manager.monoliths:
             del prompt_manager._monoliths[name]
             prompt_manager.save_monoliths()
             logger.info(f"Deleted monolith '{name}'")
             deleted = True
-        
+
         # Delete from scenario_presets if present
         if name in prompt_manager.scenario_presets:
             del prompt_manager._scenario_presets[name]
             prompt_manager.save_scenario_presets()
             logger.info(f"Deleted assembled prompt '{name}'")
             deleted = True
-        
+
         # Delete from user_prompts cache if present
         if name in prompt_state._user_prompts:
             del prompt_state._user_prompts[name]
             deleted = True
-        
+
         # Delete individual file if it exists (legacy support)
         prompts_dir = _get_prompts_dir()
         file_path = prompts_dir / f"{name}.json"
@@ -196,6 +214,27 @@ def delete_prompt(name: str) -> bool:
             file_path.unlink()
             logger.info(f"Deleted prompt file '{name}.json'")
             deleted = True
+
+        # Hand off active state loudly if we just deleted the active prompt.
+        if deleted and was_active:
+            try:
+                prompt_state.set_active_preset_name('default')
+                logger.warning(
+                    f"Deleted prompt '{name}' was ACTIVE — active preset "
+                    f"reset to 'default'. Chats still pointing at '{name}' "
+                    f"will fall back to default on next activation."
+                )
+                try:
+                    from core.event_bus import publish, Events
+                    publish(Events.SETTINGS_CHANGED, {
+                        "key": "active_prompt",
+                        "value": "default",
+                        "reason": f"deleted_active:{name}",
+                    })
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.error(f"Active-preset reset after delete failed: {e}")
         
         if not deleted:
             logger.warning(f"Prompt '{name}' not found in any storage")

@@ -288,10 +288,27 @@ async def handle_chat_stream(request: Request, _=Depends(require_login), system=
 
 @router.post("/api/cancel")
 async def handle_cancel(request: Request, _=Depends(require_login), system=Depends(get_system)):
-    """Cancel ongoing streaming generation."""
+    """Cancel ongoing streaming generation.
+
+    Optional `chat` query param scopes the cancel. If provided and doesn't
+    match the chat that's currently streaming, returns no-op — prevents a
+    cancel-click in tab A from killing tab B's generation. Without the
+    param, behavior is legacy-global. H5 2026-04-22 — partial fix; full
+    per-request streaming state is H4 architecture work.
+    """
     try:
-        system.llm_chat.streaming_chat.cancel_flag = True
-        logger.info("CANCEL: Flag set")
+        requested_chat = request.query_params.get('chat')
+        streaming = system.llm_chat.streaming_chat
+        active_chat = getattr(streaming, 'active_chat_name', None)
+        if requested_chat and active_chat and requested_chat != active_chat:
+            logger.info(f"CANCEL: no-op — requested='{requested_chat}' active='{active_chat}'")
+            return {
+                "status": "no-op",
+                "message": f"No stream active for chat '{requested_chat}' "
+                           f"(currently streaming: '{active_chat}').",
+            }
+        streaming.cancel_flag = True
+        logger.info(f"CANCEL: Flag set (chat='{active_chat or 'unknown'}')")
         return {"status": "success", "message": "Cancellation requested"}
     except Exception as e:
         logger.error(f"Error during cancellation: {e}")

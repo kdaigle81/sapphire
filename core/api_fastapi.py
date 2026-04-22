@@ -465,6 +465,39 @@ def _apply_chat_settings(system, settings: dict):
                     prompts.apply_scenario(prompt_name)
 
                 logger.info(f"Applied prompt: {prompt_name}")
+            else:
+                # Chat settings named a prompt that no longer exists (likely
+                # deleted after the chat was configured with it). Fall back to
+                # 'default' loudly AND rewrite the chat's settings so the
+                # next activation doesn't take the same wrong turn. Silent
+                # no-op here = chat sticks with whatever prompt the previous
+                # chat left loaded. H3 fix 2026-04-22.
+                logger.warning(
+                    f"Chat references unknown prompt '{prompt_name}' "
+                    f"— falling back to 'default' and rewriting chat settings."
+                )
+                default_data = prompts.get_prompt('default')
+                default_content = default_data.get('content', '') if isinstance(default_data, dict) else ''
+                if default_content:
+                    system.llm_chat.set_system_prompt(default_content)
+                    prompts.set_active_preset_name('default')
+                try:
+                    chat_name = system.llm_chat.session_manager.get_active_chat_name()
+                    if chat_name:
+                        system.llm_chat.session_manager.update_chat_settings(
+                            chat_name, {"prompt": "default"}
+                        )
+                except Exception as e:
+                    logger.debug(f"Could not rewrite chat.prompt after fallback: {e}")
+                try:
+                    from core.event_bus import publish, Events
+                    publish(Events.SETTINGS_CHANGED, {
+                        "key": "chat_prompt_fallback",
+                        "value": "default",
+                        "reason": f"missing:{prompt_name}",
+                    })
+                except Exception:
+                    pass
     except Exception as e:
         logger.error(f"Error applying prompt settings: {e}")
 
