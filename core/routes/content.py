@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 import config
 from core.auth import require_login
-from core.api_fastapi import get_system, _apply_chat_settings, PROJECT_ROOT
+from core.api_fastapi import get_system, _apply_chat_settings, PROJECT_ROOT, reapply_if_active
 from core.event_bus import publish, Events
 from core import prompts
 
@@ -89,12 +89,13 @@ async def get_prompt(name: str, request: Request, _=Depends(require_login)):
 
 
 @router.put("/api/prompts/{name}")
-async def save_prompt(name: str, request: Request, _=Depends(require_login)):
+async def save_prompt(name: str, request: Request, _=Depends(require_login), system=Depends(get_system)):
     """Save a prompt."""
     data = await request.json()
     success, msg = prompts.save_prompt(name, data)
     if success:
         publish(Events.PROMPT_CHANGED, {"name": name, "action": "saved"})
+        reapply_if_active(system, 'prompt', name)
         return {"status": "success", "name": name}
     else:
         raise HTTPException(status_code=400, detail=msg or "Failed to save prompt")
@@ -295,7 +296,7 @@ async def enable_functions(request: Request, _=Depends(require_login), system=De
 
 
 @router.post("/api/toolsets/custom")
-async def save_custom_toolset(request: Request, _=Depends(require_login)):
+async def save_custom_toolset(request: Request, _=Depends(require_login), system=Depends(get_system)):
     """Save a custom toolset."""
     from core.toolsets import toolset_manager
     data = await request.json()
@@ -304,6 +305,7 @@ async def save_custom_toolset(request: Request, _=Depends(require_login)):
     if not name:
         raise HTTPException(status_code=400, detail="Name required")
     if toolset_manager.save_toolset(name, functions):
+        reapply_if_active(system, 'toolset', name)
         return {"status": "success", "name": name}
     else:
         raise HTTPException(status_code=500, detail="Failed to save toolset")
@@ -534,7 +536,7 @@ async def clear_default_persona(request: Request, _=Depends(require_login)):
 
 
 @router.put("/api/personas/{name}")
-async def update_persona(name: str, request: Request, _=Depends(require_login)):
+async def update_persona(name: str, request: Request, _=Depends(require_login), system=Depends(get_system)):
     """Update an existing persona."""
     from core.personas import persona_manager
     if not persona_manager.exists(name):
@@ -542,6 +544,7 @@ async def update_persona(name: str, request: Request, _=Depends(require_login)):
     data = await request.json()
     if not persona_manager.update(name, data):
         raise HTTPException(status_code=500, detail="Failed to update persona")
+    reapply_if_active(system, 'persona', name)
     return {"status": "success"}
 
 

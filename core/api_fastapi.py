@@ -546,6 +546,50 @@ def _apply_chat_settings(system, settings: dict):
     except Exception as e:
         logger.error(f"Error applying toolset: {e}")
 
+
+def reapply_if_active(system, domain: str, name: str):
+    """Hot-reload a saveable thing into the active chat's runtime state.
+
+    When a user edits a toolset/prompt/persona that the active chat is
+    currently using, saving the file alone does not refresh the in-memory
+    runtime — function_manager._enabled_tools, current_system_prompt, etc.
+    stay stale until re-activation. This helper closes that gap.
+
+    No-op when the active chat doesn't reference `name`. Wrapped in a broad
+    try/except so a hot-reload failure never breaks the save response.
+
+    Remmi/Zeebs field report 2026-04-23: editing an active toolset to add a
+    newly-registered plugin tool looked like it worked (file saved) but the
+    tool call returned "not currently available" until re-Activate. This
+    makes the edit land on the first save, as users reasonably expect.
+    """
+    try:
+        chat_settings = system.llm_chat.session_manager.get_chat_settings() or {}
+        if chat_settings.get(domain) != name:
+            return
+        if domain == 'toolset':
+            system.llm_chat.function_manager.update_enabled_functions([name])
+            publish(Events.TOOLSET_CHANGED, {"name": name})
+        elif domain == 'prompt':
+            data = prompts.get_prompt(name)
+            content = data.get('content', '') if isinstance(data, dict) else ''
+            if content:
+                system.llm_chat.set_system_prompt(content)
+                publish(Events.PROMPT_CHANGED, {"name": name, "action": "reapplied"})
+        elif domain == 'persona':
+            # Persona is a bundle; rerun the full apply so prompt/toolset/
+            # voice/scopes all sync to the edited persona's settings.
+            from core.personas import persona_manager
+            persona = persona_manager.get(name)
+            if persona:
+                settings = persona.get("settings", {}).copy()
+                settings["persona"] = name
+                _apply_chat_settings(system, settings)
+        logger.info(f"Hot-reload: re-applied {domain} '{name}' to active chat")
+    except Exception as e:
+        logger.warning(f"Hot-reload {domain}='{name}' failed: {e}")
+
+
 # =============================================================================
 # ROUTE MODULES
 # =============================================================================
