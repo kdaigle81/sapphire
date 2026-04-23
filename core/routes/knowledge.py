@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File
+from fastapi.responses import JSONResponse
 
 import config
 from core.auth import require_login
@@ -730,7 +731,13 @@ async def list_memories(request: Request, _=Depends(require_login)):
             "id": mid, "content": content, "timestamp": ts,
             "label": label, "private_key": private_key,
         })
-    return {"memories": grouped, "total": len(rows)}
+    # no-store: Mind view re-fetches after MIND_CHANGED; browser disk/memory
+    # cache serving a stale body here would leave fresh saves (esp. private_key
+    # badges) invisible until F5. 2026-04-22.
+    return JSONResponse(
+        content={"memories": grouped, "total": len(rows)},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.put("/api/memory/{memory_id}")
